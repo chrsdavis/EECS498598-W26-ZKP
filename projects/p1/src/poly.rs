@@ -503,7 +503,15 @@ impl<F: Field> MulAssign<F> for Univariate<F> {
     ///
     /// Computes `self := c * self`, scaling every coefficient by `c`.
     fn mul_assign(&mut self, rhs: F) {
-        todo!()
+        if rhs.is_zero() {
+            self.coeffs.clear();
+            return;
+        }
+
+        for c in &mut self.coeffs {
+            *c *= rhs;
+        }
+        self.trim();
     }
 }
 
