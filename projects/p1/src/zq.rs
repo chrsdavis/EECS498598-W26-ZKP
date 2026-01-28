@@ -69,11 +69,11 @@ impl<Q: PrimeModulus> Zq<Q> {
     }
     // returns *self^2
     pub fn square(&self) -> Self {
-        todo!()
+        *self * *self
     }
     // Returns *self^3
     pub fn cube(&self) -> Self {
-        todo!()
+        self.square() * *self
     }
 
     //Note that this will just reduce the bytes mod Q; this does _not_ guarantee a uniform distribution!
