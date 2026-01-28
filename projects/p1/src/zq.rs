@@ -360,7 +360,8 @@ impl<Q: PrimeModulus> Mul for Zq<Q> {
     /// ```
     /// Splits a 512-bit integer into its low and high 256-bit halves: `(low, high)`.
     fn mul(self, rhs: Self) -> Self::Output {
-        todo!()
+        let prod = self.value.widening_mul(&rhs.value);
+        Zq::new_unchecked(prod % Q::VALUE)
     }
 }
 
