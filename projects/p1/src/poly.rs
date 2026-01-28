@@ -361,7 +361,11 @@ impl<F: Field> Univariate<F> {
     /// p(x) = c_0 + x·(c_1 + x·(c_2 + ... + x·(c_{n-2} + x·c_{n-1})...))
     /// ```
     pub fn evaluate(&self, x: F) -> F {
-        todo!()
+        let mut sum = F::zero();
+        for &c in self.coeffs.iter().rev() {
+            sum = sum * x + c;
+        }
+        sum
     }
 }
 
