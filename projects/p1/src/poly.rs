@@ -164,7 +164,19 @@ impl<F: Field> Multilinear<F> {
     ///
     /// where `j = variable_index`.
     pub fn to_univariate(&self, variable_index: usize) -> Univariate<F> {
-        todo!()
+        // TODO: assert!(variable_index < self.n_vars);
+
+        let mut sum_0 = F::zero();
+        let mut sum_1 = F::zero();
+        for (idx, &val) in self.evals.iter().enumerate {
+            if ((idx >> variable_index) & 1 == 0) {
+                sum_0 += val;
+            } else {
+                sum_1 += val;
+            }
+        }
+
+        Univariate::new(vec![sum_0, sum_1 - sum_0])
     }
 }
 
