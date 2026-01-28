@@ -215,7 +215,9 @@ impl<F: Field> SubAssign<&Multilinear<F>> for Multilinear<F> {
     /// Panics if `self.n_vars != rhs.n_vars`.
     fn sub_assign(&mut self, rhs: &Self) {
         assert_eq!(self.n_vars, rhs.n_vars);
-        todo!()
+        for (a, &b) in self.evals.iter_mut().zip(rhs.evals.iter()) {
+            *a -= b;
+        }
     }
 }
 
