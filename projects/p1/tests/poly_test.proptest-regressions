@@ -1,0 +1,10 @@
+# Seeds for failure cases proptest has generated in the past. It is
+# automatically read and these particular cases re-run before any
+# novel cases are generated.
+#
+# It is recommended to check this file in to source control so that
+# everyone who runs the test benefits from these saved cases.
+cc 5d2193f74eb8b96b4530328c62864a6e379daee1fbcbcd9584c2e138a0fe411e # shrinks to a = Multilinear { n_vars: 1, evals: [3 (mod 13), 3 (mod 13)] }
+cc 15ae47f535b4c9fd8854f4bc382a5a1354e61660c2390db632caef34fbebde41 # shrinks to (a, b) = (Multilinear { n_vars: 0, evals: [8 (mod 13)] }, Multilinear { n_vars: 0, evals: [3 (mod 13)] })
+cc 01bcdb8c2ffdbdded898faae6b2f78658893d26d8267461b4659880789c53368 # shrinks to a = Univariate { coeffs: [0 (mod 13), 0 (mod 13), 0 (mod 13), 0 (mod 13), 9 (mod 13), 8 (mod 13), 8 (mod 13), 11 (mod 13), 1 (mod 13), 9 (mod 13)] }, b = Univariate { coeffs: [4 (mod 13), 3 (mod 13), 3 (mod 13)] }
+cc d354ca0eb0d86eb101180fe1a84b6b85f2ee35e5ef8dbbb7e451f579ac5823f6 # shrinks to (a, b) = (Multilinear { n_vars: 4, evals: [0 (mod 13), 0 (mod 13), 0 (mod 13), 0 (mod 13), 7 (mod 13), 0 (mod 13), 10 (mod 13), 1 (mod 13), 8 (mod 13), 6 (mod 13), 8 (mod 13), 1 (mod 13), 12 (mod 13), 2 (mod 13), 12 (mod 13), 11 (mod 13)] }, Multilinear { n_vars: 4, evals: [9 (mod 13), 2 (mod 13), 0 (mod 13), 12 (mod 13), 2 (mod 13), 12 (mod 13), 8 (mod 13), 6 (mod 13), 3 (mod 13), 10 (mod 13), 10 (mod 13), 0 (mod 13), 0 (mod 13), 8 (mod 13), 3 (mod 13), 7 (mod 13)] })
