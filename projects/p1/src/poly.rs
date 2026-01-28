@@ -326,7 +326,26 @@ impl<F: Field> Univariate<F> {
     /// such that `p(x_i) = y_i` for all `i`.
     pub fn interpolate(points: &[(F, F)]) -> Self {
         assert!(!points.is_empty(), "need at least one point");
-        todo!()
+
+        // Lagrange interpolation
+        // P(x) = \sum_i y_i * L_i(x)
+
+        let mut result = Self::zero();
+        for (i, &(x_i, y_i)) in points.iter().enumerate() {
+            let mut num = Self::constant(F::one());
+            let mut den = F::one();
+
+            // Lagrange basis fn
+            for (j, &(x_j, _)) in points.iter().enumerate() {
+                if (i == j) { continue; }
+                num *= &Self::new(vec![-x_j, F::one()]); // x - x_j
+                den *= x_i - x_j
+            }
+
+            // TODO: assert that den is non-zero?
+            num *= y_i / den;
+            result += &numer;
+        }
     }
 
     /// Computes `p(x) = c_0 + c_1·x + c_2·x² + ... + c_{n-1}·x^{n-1}` for the
