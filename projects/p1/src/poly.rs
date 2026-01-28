@@ -99,7 +99,23 @@ impl<F: Field> Multilinear<F> {
     /// This function panics if `self.n_vars != point.len()`
     pub fn evaluate(&self, point: &[F]) -> F {
         assert!(self.n_vars == point.len());
-        todo!()
+
+        // TODO: don't copy here
+        let mut layer = self.evals.clone();
+        for &r in point {
+            let one_minus_r = F::one() - r;
+            let mut merged = Vec::with_capacity(layer.len() / 2);
+            for j in 0..(layer.len() / 2) {
+                let v0 = layer[2 * j];
+                let v1 = layer[2 * j + 1];
+                merged.push(v0 * one_minus_r + v1 * r);
+            }
+
+            layer = merged; // merge the interpolations
+        }
+
+        // ends with layer.size() = 1; i.e. all merged
+        layer[0]
     }
 
     /// Partially evaluates the polynomial by fixing the first `k` variables.
