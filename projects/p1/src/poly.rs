@@ -137,7 +137,7 @@ impl<F: Field> Multilinear<F> {
 
         // TODO: don't copy here
         let mut layer = self.evals.clone();
-        for &r in point {
+        for &r in partial_point {
             let one_minus_r = F::one() - r;
             let mut merged = Vec::with_capacity(layer.len() / 2);
             for j in 0..(layer.len() / 2) {
@@ -168,8 +168,8 @@ impl<F: Field> Multilinear<F> {
 
         let mut sum_0 = F::zero();
         let mut sum_1 = F::zero();
-        for (idx, &val) in self.evals.iter().enumerate {
-            if ((idx >> variable_index) & 1 == 0) {
+        for (idx, &val) in self.evals.iter().enumerate() {
+            if (idx >> variable_index) & 1 == 0 {
                 sum_0 += val;
             } else {
                 sum_1 += val;
@@ -337,14 +337,14 @@ impl<F: Field> Univariate<F> {
 
             // Lagrange basis fn
             for (j, &(x_j, _)) in points.iter().enumerate() {
-                if (i == j) { continue; }
+                if i == j { continue; }
                 num *= &Self::new(vec![-x_j, F::one()]); // x - x_j
                 den *= x_i - x_j
             }
 
             // TODO: assert that den is non-zero?
             num *= y_i / den;
-            result += &numer;
+            result += &num;
         }
 
         result
@@ -480,7 +480,7 @@ impl<F: Field> MulAssign<&Univariate<F>> for Univariate<F> {
         let a = std::mem::take(&mut self.coeffs);
         let mut result = vec![F::zero(); a.len() + other.coeffs.len() - 1];
 
-        for (i, &a) in a.iter().enumerate() {
+        for (i, &ai) in a.iter().enumerate() {
             for (j, &bj) in other.coeffs.iter().enumerate() {
                 result[i + j] += ai * bj;
             }
