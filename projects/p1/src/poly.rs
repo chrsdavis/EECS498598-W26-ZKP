@@ -100,6 +100,7 @@ impl<F: Field> Multilinear<F> {
     pub fn evaluate(&self, point: &[F]) -> F {
         assert!(self.n_vars == point.len());
 
+        // TODO: is there a better way of doing this (e.g. fold expression in c++)?
         // TODO: don't copy here
         let mut layer = self.evals.clone();
         for &r in point {
@@ -133,7 +134,22 @@ impl<F: Field> Multilinear<F> {
     /// This function panics if `partial_point.len() > self.n_vars`
     pub fn partial_eval(&self, partial_point: &[F]) -> Self {
         assert!(partial_point.len() <= self.n_vars);
-        todo!()
+
+        // TODO: don't copy here
+        let mut layer = self.evals.clone();
+        for &r in point {
+            let one_minus_r = F::one() - r;
+            let mut merged = Vec::with_capacity(layer.len() / 2);
+            for j in 0..(layer.len() / 2) {
+                let v0 = layer[2 * j];
+                let v1 = layer[2 * j + 1];
+                merged.push(v0 * one_minus_r + v1 * r);
+            }
+
+            layer = merged; // merge the interpolations
+        }
+
+        Self::new(self.n_vars - partial_point.len(), layer)
     }
 
     /// Computes the univariate polynomial obtained by summing over all variables except one.
