@@ -249,7 +249,15 @@ impl<Q: PrimeModulus> Add for Zq<Q> {
     /// Example: if `self = 10` and `rhs = 15`, then `borrowing_sub` returns
     /// `(2²⁵⁶ - 5, true)` since the subtraction underflowed.
     fn add(self, rhs: Self) -> Self::Output {
-        todo!()
+        let (sum, overflowed) = self.value.carrying_add(&rhs.value);
+
+        let reduced = if overflowed || sum >= Q::VALUE {
+            sum.borrowing_sub(&Q::VALUE).0
+        } else {
+            sum
+        }
+
+        Zq::new_unchecked(reduced);
     }
 }
 impl<Q: PrimeModulus> Neg for Zq<Q> {
