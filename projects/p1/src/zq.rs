@@ -122,7 +122,7 @@ impl<Q: PrimeModulus> Zq<Q> {
     ///
     /// Panics if any element is zero.
     pub fn batch_invert(values: &[Zq<Q>]) -> Vec<Zq<Q>> {
-        // OPTIONAL: replace me with montgomery batch inversion
+        // OPTIONAL TODO: replace me with montgomery batch inversion
         values.iter().map(|val| val.inv()).collect()
     }
 
