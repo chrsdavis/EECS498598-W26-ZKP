@@ -264,7 +264,11 @@ impl<Q: PrimeModulus> Neg for Zq<Q> {
     type Output = Zq<Q>;
     /// Computes the additive inverse: `-self mod Q`.
     fn neg(self) -> Self::Output {
-        todo!()
+        if self.value.is_zero() {
+            self
+        } else {
+            Zq::new_unchecked(Q::VALUE.borrowing_sub(&self.value).0)
+        }
     }
 }
 
