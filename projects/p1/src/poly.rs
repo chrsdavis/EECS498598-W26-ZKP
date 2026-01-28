@@ -472,7 +472,21 @@ impl<F: Field> MulAssign<&Univariate<F>> for Univariate<F> {
     ///
     /// The coefficient of `x^k` in the product is `Σ_{i+j=k} self[i] * other[j]`.
     fn mul_assign(&mut self, other: &Self) {
-        todo!()
+        if self.coeffs.is_empty() || other.coeffs.is_empty() {
+            self.coeffs.clear();
+            return;
+        }
+
+        let a = std::mem::take(&mut self.coeffs);
+        let mut result = vec![F::zero(); a.len() + other.coeffs.len() - 1];
+
+        for (i, &a) in a.iter().enumerate() {
+            for (j, &bj) in other.coeffs.iter().enumerate() {
+                result[i + j] += ai * bj;
+            }
+        }
+        self.coeffs = result;
+        self.trim();
     }
 }
 
