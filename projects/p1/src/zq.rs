@@ -174,7 +174,15 @@ impl<Q: PrimeModulus> Pow<U256> for Zq<Q> {
     /// This is the same operation as [`Pow<u64>::pow`], but accepts a 256-bit
     /// exponent. Your implementation should look substantially similar.
     fn pow(self, exp: U256) -> Self::Output {
-        todo!()
+        let mut base = self;
+        let mut res = Zq::<Q>::one();
+
+        for i in 0..exp.bit_length() {
+            if exp.bit(i) { res *= base; }
+            base = base.square();
+        }
+
+        res
     }
 }
 
