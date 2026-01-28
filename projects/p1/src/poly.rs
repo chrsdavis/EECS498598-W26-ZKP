@@ -346,6 +346,8 @@ impl<F: Field> Univariate<F> {
             num *= y_i / den;
             result += &numer;
         }
+
+        result
     }
 
     /// Computes `p(x) = c_0 + c_1·x + c_2·x² + ... + c_{n-1}·x^{n-1}` for the
