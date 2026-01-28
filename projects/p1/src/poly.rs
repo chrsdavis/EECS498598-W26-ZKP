@@ -72,7 +72,23 @@ impl<F: Field> Multilinear<F> {
     /// - If bit i of b is 0: contributes factor `1 - g[i]`
     ///
     pub fn eq_tilde(g: &[F]) -> Self {
-        todo!()
+        let n_vars = g.len();
+        // TODO: Assert here?
+    
+        let num_evals = 1usize << n_vars;
+        let mut evals = Vec::with_capacity(num_evals);
+    
+        for idx in 0..num_evals {
+            let mut prod = F::one();
+            for (i, &gi) in g.iter().enumerate() {
+                // (x_i · g_i + (1 - x_i) · (1 - g_i))
+                let bit_is_set = ((idx >> i) & 1) == 1;
+                let term = if bit_is_set {gi} else { F::one() - gi };
+                prod *= term;
+            }
+            evals.push(prod);
+        }
+        Self::new(n_vars, evals)
     }
     /// Evaluates the multilinear polynomial at an arbitrary point in F^n.
     ///
