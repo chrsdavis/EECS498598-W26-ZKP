@@ -153,7 +153,17 @@ impl<Q: PrimeModulus> Pow<u64> for Zq<Q> {
     /// for elliptic curves) to reduce the number of operations from `exp` to
     /// at most `2 · log₂(exp)`.
     fn pow(self, exp: u64) -> Self::Output {
-        todo!()
+        let mut base = self;
+        let mut e = exp;
+        let mut res = Zq::<Q>::one();
+
+        while e > 0 {
+            if (e & 1) == 1 { res *= base; }
+            base = base.square();
+            e >>= 1;
+        }
+
+        res
     }
 }
 
