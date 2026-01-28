@@ -466,7 +466,19 @@ impl<Q: PrimeModulus> fmt::Display for Zq<Q> {
 /// Equivalently, `⌈log₂(self + 1)⌉` for nonzero values.
 impl<Q: PrimeModulus> Random for Zq<Q> {
     fn random(source: &mut impl rand::Rng) -> Self {
-        todo!()
+        let n_bits = Q::VALUE.bit_length();
+        let n_bytes = (n_bits + 7) / 8;
+
+        let mut bytes = [0u8; 32];
+        loop {
+            source.fill_bytes(&mut bytes[..n_bytes]);
+            bytes[n_bytes..].fill(0);
+
+            let candidate = U256::from_le_slice(&bytes);
+            if candidate < Q::VALUE {  // rejection sampling
+                return Zq::new_unchecked(candidate);
+            }
+        }
     }
 }
 impl<Q: PrimeModulus> Inv for Zq<Q> {
