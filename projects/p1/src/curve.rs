@@ -196,7 +196,7 @@ impl P256Point {
     /// Returns true iff (x,y) is on the curve. Which is to say, y^2 = x^3 + a256 * x + b256
     #[inline]
     pub fn is_on_curve(x: &Zq<P256>, y: &Zq<P256>) -> bool {
-        todo!()
+        y.square() == x.cube() + (SECP256R1_A256 * *x) + SECP256R1_B256
     }
 
     /// Computes a multi-scalar multiplication (MSM), also known as a linear combination of points.
