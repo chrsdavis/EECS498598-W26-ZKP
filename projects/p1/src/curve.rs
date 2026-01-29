@@ -264,7 +264,36 @@ impl Add for P256Point {
     /// distinguish when `P = Q` vs `P ≠ Q`.
     #[inline]
     fn add(self, rhs: Self) -> Self::Output {
-        todo!()
+        match (self, rhs) {
+            (P256Point::Inf, q) => q,
+            (p, P256Point::Inf) => p,
+            (
+                P256Point::Point { x: x1, y: y1, .. },
+                P256Point::Point { x: x2, y: y2, .. },
+            ) => {
+                // same x-coord, so P = \pm Q
+                if x1 == x2 {
+                    if y1 + y2 == Zq::<P256>::zero() { // P = Q
+                        return P256Point::Inf;
+                    }
+                    // Point doubling (if y == 0, tangent is vertical => infinity)
+                    if y1.is_zero() {
+                        return P256Point::Inf;
+                    }
+
+                    let lambda = (Zq::<P256>::from(3u64) * x1.square() + SECP256R1_A256)
+                        / (Zq::<P256>::from(2u64) * y1);
+                    let x3 = lambda.square() - (Zq::<P256>::from(2u64) * x1);
+                    let y3 = lambda * (x1 - x3) - y1;
+                    P256Point::point_unchecked(x3, y3)
+                } else {
+                    // Chord, P \neq Q
+                    let lambda = (y2 - y1) / (x2 - x1);
+                    let x3 = lambda.square() - x1 - x2;
+                    let y3 = lambda * (x1 - x3) - y1;
+                    P256Point::point_unchecked(x3, y3)
+                }
+        }
     }
 }
 
