@@ -8,7 +8,7 @@ use std::{
 
 use num_traits::{Inv, One, Pow, Zero};
 use serde::{Deserialize, Serialize};
-use sfs_bigint::U256;
+use sfs_bigint::{U256, U512};
 
 use crate::{Field, Random, moduli::PrimeModulus};
 
@@ -255,9 +255,9 @@ impl<Q: PrimeModulus> Add for Zq<Q> {
             sum.borrowing_sub(&Q::VALUE).0
         } else {
             sum
-        }
+        };
 
-        Zq::new_unchecked(reduced);
+        Self::new_unchecked(reduced)
     }
 }
 impl<Q: PrimeModulus> Neg for Zq<Q> {
