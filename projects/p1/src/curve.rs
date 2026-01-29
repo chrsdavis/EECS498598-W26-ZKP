@@ -355,7 +355,17 @@ impl Mul<Zq<P256CurveOrder>> for P256Point {
     /// bit-length of `s`.
     #[inline]
     fn mul(self, rhs: Zq<P256CurveOrder>) -> Self::Output {
-        todo!()
+        let mut acc = P256Point::zero();
+        let mut base = self;
+
+        for i in 0..rhs.bit_length() {
+            if rhs.bit(i) {
+                acc = acc + base;
+            }
+            base = base + base;
+        }
+
+        acc
     }
 }
 
