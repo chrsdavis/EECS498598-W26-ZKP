@@ -491,7 +491,7 @@ impl<Q: PrimeModulus> Inv for Zq<Q> {
     ///
     /// Panics if `self` is zero, or more generally if `gcd(self, Q::VALUE) != 1`
     fn inv(self) -> Self::Output {
-        assert!(!self.is_zero(), "`self` is zero; no modular inverse exists");
+        assert!(!self.is_zero(), "0 has no modular inverse");
 
         let (mut t, mut new_t) = (Self::zero(), Self::one());
         let (mut r, mut new_r) = (Q::VALUE, self.value);
