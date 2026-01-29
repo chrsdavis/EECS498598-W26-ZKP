@@ -496,36 +496,30 @@ impl<Q: PrimeModulus> Inv for Zq<Q> {
         let (mut t, mut new_t) = (Self::zero(), Self::one());
         let (mut r, mut new_r) = (Q::VALUE, self.value);
 
-        while new_r != Self::zero() {
-            // new_r = r - q*new_r  (do q*new_r in U512 to avoid overflow)
-            // let prod: U512 = q.widening_mul(&new_r);
-            // let (prod_lo, prod_hi) = prod.split();
-            // debug_assert!(prod_hi.is_zero());
-            // let r_next = r - prod_lo;
-
-            // // new_t = t - (q mod Q)*new_t  (t tracked modulo Q, so no negatives)
-            // let q_mod = Self::new_unchecked(q);
-            // let t_next = t - q_mod * new_t;
-
-            // r = new_r;
-            // new_r = r_next;
-            // t = new_t;
-            // new_t = t_next;
-
+        while new_r != U256::zero() {
             let q = r / new_r;
-            let old_r = r;
+
+            // r_next = r - q * new_r
+            let prod: U512 = q.widening_mul(&new_r);
+            let (prod_lo, prod_hi) = prod.split();
+            debug_assert!(prod_hi.is_zero());
+
+            let (r_next, borrowed) = r.borrowing_sub(&prod_lo);
+            debug_assert!(!borrowed);
+
+            // t_next = t - (q mod Q) * new_t
+            // since r, new_r < Q, then q < Q, so we don't need reduction
+            let q_mod = Self::new_unchecked(q);
+            let t_next = t - q_mod * new_t;
+
             r = new_r;
-            new_r = old_r - q * new_r;
-            let old_t = t;
+            new_r = r_next;
+
             t = new_t;
-            new_t = old_t - q * new_t;
+            new_t = t_next;
         }
 
-        assert!(r == U256::one(), "`self` is not invertible");
-        if (t < 0) {
-            t += n;
-        }
-
+        assert!(r == U256::one(), "`self` is not invertible modulo Q");
         t
     }
 }
