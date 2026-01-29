@@ -236,7 +236,11 @@ impl P256Point {
     #[inline]
     pub fn msm(scalars: &[Zq<P256CurveOrder>], bases: &[P256Point]) -> P256Point {
         assert_eq!(scalars.len(), bases.len());
-        todo!()
+        let mut sum = P256Point.zero();
+        for (&s, &p) in scalars.iter().zip(bases.iter()) {
+            sum = sum + (p * s);
+        }
+        sum
     }
 }
 
