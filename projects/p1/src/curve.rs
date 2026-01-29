@@ -307,7 +307,7 @@ impl Sub for P256Point {
     /// This can be implemented trivially using `Add` and `Neg`.
     #[inline]
     fn sub(self, rhs: Self) -> Self::Output {
-        todo!()
+        self + (-rhs)
     }
 }
 impl Neg for P256Point {
