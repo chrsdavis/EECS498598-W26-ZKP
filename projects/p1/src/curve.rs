@@ -236,7 +236,7 @@ impl P256Point {
     #[inline]
     pub fn msm(scalars: &[Zq<P256CurveOrder>], bases: &[P256Point]) -> P256Point {
         assert_eq!(scalars.len(), bases.len());
-        let mut sum = P256Point.zero();
+        let mut sum = P256Point::zero();
         for (&s, &p) in scalars.iter().zip(bases.iter()) {
             sum = sum + (p * s);
         }
@@ -293,6 +293,7 @@ impl Add for P256Point {
                     let y3 = lambda * (x1 - x3) - y1;
                     P256Point::point_unchecked(x3, y3)
                 }
+            }
         }
     }
 }
