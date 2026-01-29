@@ -316,7 +316,10 @@ impl Neg for P256Point {
     /// Computes the additive inverse: `-P`.
     #[inline]
     fn neg(self) -> Self::Output {
-        todo!()
+        match self {
+            P256Point::Inf => P256Point::Inf,
+            P256Point::Point {x, y, ..} => P256Point::point_unchecked(x, -y)
+        }
     }
 }
 
