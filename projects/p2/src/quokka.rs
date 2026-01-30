@@ -196,11 +196,11 @@ impl<E: EllipticCurve> InteractiveProof for OpenProtocol<E> {
     ///
     /// # Algorithm
     ///
-    /// 1. Compute `b = eq̃(r_top)` (called `b̄` in the project spec) from the top half of the evaluation point.
-    /// 2. Derive commitment `C' = ⟨b, row_commitments⟩` (the project spec's `Σ b_k C_k`).
-    /// 3. Receive the prover's claimed `b^T · M` vector (called `c̄` in the project spec).
-    /// 4. Verify the claim by checking `MSM(c̄, generators) = C'` (the project spec's `Σ c_i G_i = C'`).
-    /// 5. Compute `a = eq̃(r_bot)` (called `ā` in the project spec) from the bottom half of the evaluation point.
+    /// 1. Compute `b = eq̃(r_top)` from the top half of the evaluation point.
+    /// 2. Derive commitment `C' = ⟨b, C⟩`.
+    /// 3. Receive the prover's claimed `c̄`.
+    /// 4. Verify the claim by checking `Σ c_i G_i = C'`).
+    /// 5. Compute `a = eq̃(r_bot)` from the bottom half of the evaluation point.
     /// 6. Check that `⟨a, c̄⟩ = stmt.value`.
     ///
     /// Note: The project spec's `Quokka.Open` returns `⟨c̄, ā⟩` as the evaluation. This implementation
