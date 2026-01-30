@@ -23,7 +23,7 @@
 //!    - Verifier checks `b^T · M` matches the commitment via MSM: `⟨b, commitments⟩`.
 //!    - Verifier computes `a = eq̃(r_bot)` and checks `⟨a, b^T · M⟩ = v`.
 //!
-//! ## Relationship to Project Spec (Figure 2)
+//! ## Slight differences from project spec
 //!
 //! The project spec presents `Quokka.Open` with the verifier sending `(r, C')` to the prover first.
 //! In this implementation, `r` is part of the [`Statement`] (since it typically comes from
@@ -34,14 +34,6 @@
 //! Additionally, the project spec's `Quokka.Open` returns the computed evaluation `⟨c, a⟩`. This
 //! implementation instead takes a claimed evaluation in the [`Statement`] and verifies it,
 //! which is the natural interface when used within Delphian.
-//!
-//! ## Security
-//!
-//! The scheme is **binding** under the discrete logarithm assumption: a cheating prover
-//! cannot open a commitment to two different values at the same point without solving DLog.
-//!
-//! This implementation is **non-hiding** (not zero-knowledge). A hiding variant would add
-//! blinding factors to the commitment and opening.
 
 use crate::{
     ec::{EllipticCurve, ScalarOf},
@@ -96,7 +88,7 @@ pub struct Witness<E: EllipticCurve> {
 /// and `C'` is the derived row commitment. In this implementation, `r` is part of the
 /// [`Statement`] and `C'` is derivable, so no verifier message is needed. This type
 /// exists for interface compatibility with [`InteractiveProof`].
-pub type VerifierMessage<E> = ScalarOf<E>;
+pub type VerifierMessage = ();
 
 /// Messages from the prover to the verifier.
 ///
@@ -170,7 +162,7 @@ impl<E: EllipticCurve> InteractiveProof for OpenProtocol<E> {
     type Statement = Statement<E>;
     type Witness = Witness<E>;
     type ProverMessage = ProverMessage<E>;
-    type VerifierMessage = VerifierMessage<E>;
+    type VerifierMessage = VerifierMessage;
 
     /// The prover produces no output beyond completing the protocol.
     type ProverOutput = ();
