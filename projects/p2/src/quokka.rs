@@ -209,8 +209,8 @@ impl<E: EllipticCurve> InteractiveProof for OpenProtocol<E> {
     /// # Errors
     ///
     /// Returns an error if:
-    /// - The prover's claimed `b^T · M` doesn't match the derived commitment
-    /// - The final evaluation `⟨a, b^T · M⟩ ≠ stmt.value`
+    /// - The prover's claimed `c̄` doesn't match the derived commitment
+    /// - The final evaluation `⟨a, c̄⟩ ≠ stmt.value`
     async fn verifier<R: rand::Rng>(
         stmt: Statement<E>,
         mut comms: Comms<Self::VerifierMessage, Self::ProverMessage>,
