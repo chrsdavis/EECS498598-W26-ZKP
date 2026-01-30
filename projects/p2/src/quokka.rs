@@ -23,6 +23,18 @@
 //!    - Verifier checks `b^T · M` matches the commitment via MSM: `⟨b, commitments⟩`.
 //!    - Verifier computes `a = eq̃(r_bot)` and checks `⟨a, b^T · M⟩ = v`.
 //!
+//! ## Relationship to Project Spec (Figure 2)
+//!
+//! The project spec presents `Quokka.Open` with the verifier sending `(r, C')` to the prover first.
+//! In this implementation, `r` is part of the [`Statement`] (since it typically comes from
+//! a prior sumcheck), and `C'` is derivable from `r` and the commitment. Thus the verifier's
+//! message is redundant and the protocol becomes essentially non-interactive: only the prover
+//! sends a message.
+//!
+//! Additionally, the project spec's `Quokka.Open` returns the computed evaluation `⟨c, a⟩`. This
+//! implementation instead takes a claimed evaluation in the [`Statement`] and verifies it,
+//! which is the natural interface when used within Delphian.
+//!
 //! ## Security
 //!
 //! The scheme is **binding** under the discrete logarithm assumption: a cheating prover
@@ -80,8 +92,10 @@ pub struct Witness<E: EllipticCurve> {
 
 /// Messages from the verifier to the prover.
 ///
-/// In the basic Quokka protocol, the verifier sends no messages — the protocol is
-/// non-interactive after the commitment. This type exists for interface compatibility.
+/// In the project spec (Figure 2), the verifier sends `(r, C')` where `r` is the evaluation point
+/// and `C'` is the derived row commitment. In this implementation, `r` is part of the
+/// [`Statement`] and `C'` is derivable, so no verifier message is needed. This type
+/// exists for interface compatibility with [`InteractiveProof`].
 pub type VerifierMessage<E> = ScalarOf<E>;
 
 /// Messages from the prover to the verifier.
@@ -190,12 +204,15 @@ impl<E: EllipticCurve> InteractiveProof for OpenProtocol<E> {
     ///
     /// # Algorithm
     ///
-    /// 1. Compute `b = eq̃(r_top)` from the top half of the evaluation point.
-    /// 2. Derive a commitment to `b^T · M` via MSM: `⟨b, row_commitments⟩`.
-    /// 3. Receive the prover's claimed `b^T · M` vector.
-    /// 4. Verify the claim by checking `commit(claimed) = derived_commitment`.
-    /// 5. Compute `a = eq̃(r_bot)` from the bottom half of the evaluation point.
-    /// 6. Check that `⟨a, claimed⟩ = stmt.value`.
+    /// 1. Compute `b = eq̃(r_top)` (called `b̄` in the project spec) from the top half of the evaluation point.
+    /// 2. Derive commitment `C' = ⟨b, row_commitments⟩` (the project spec's `Σ b_k C_k`).
+    /// 3. Receive the prover's claimed `b^T · M` vector (called `c̄` in the project spec).
+    /// 4. Verify the claim by checking `MSM(c̄, generators) = C'` (the project spec's `Σ c_i G_i = C'`).
+    /// 5. Compute `a = eq̃(r_bot)` (called `ā` in the project spec) from the bottom half of the evaluation point.
+    /// 6. Check that `⟨a, c̄⟩ = stmt.value`.
+    ///
+    /// Note: The project spec's `Quokka.Open` returns `⟨c̄, ā⟩` as the evaluation. This implementation
+    /// instead takes a claimed evaluation in the [`Statement`] and verifies against it.
     ///
     /// # Errors
     ///
