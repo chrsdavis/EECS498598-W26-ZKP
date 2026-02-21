@@ -55,6 +55,7 @@ impl<F: Field> Multilinear<F> {
         Self { n_vars, evals }
     }
 
+    #[inline]
     pub fn num_vars(&self) -> usize {
         self.n_vars
     }
