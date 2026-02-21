@@ -76,7 +76,23 @@ impl<F: Field> Multilinear<F> {
     /// - If bit i of b is 0: contributes factor `1 - g[i]`
     ///
     pub fn eq_tilde(g: &[F]) -> Self {
-        todo!()
+        let n_vars = g.len();
+        // TODO: Assert here?
+    
+        let num_evals = 1usize << n_vars;
+        let mut evals = Vec::with_capacity(num_evals);
+    
+        for idx in 0..num_evals {
+            let mut prod = F::one();
+            for (i, &gi) in g.iter().enumerate() {
+                // (x_i · g_i + (1 - x_i) · (1 - g_i))
+                let bit_is_set = ((idx >> i) & 1) == 1;
+                let term = if bit_is_set {gi} else { F::one() - gi };
+                prod *= term;
+            }
+            evals.push(prod);
+        }
+        Self::new(n_vars, evals)
     }
     /// Evaluates the multilinear polynomial at an arbitrary point in F^n.
     ///
@@ -87,7 +103,24 @@ impl<F: Field> Multilinear<F> {
     /// This function panics if `self.n_vars != point.len()`
     pub fn evaluate(&self, point: &[F]) -> F {
         assert!(self.n_vars == point.len());
-        todo!()
+
+        // TODO: is there a better way of doing this (e.g. fold expression in c++)?
+        // TODO: don't copy here
+        let mut layer = self.evals.clone();
+        for &r in point {
+            let one_minus_r = F::one() - r;
+            let mut merged = Vec::with_capacity(layer.len() / 2);
+            for j in 0..(layer.len() / 2) {
+                let v0 = layer[2 * j];
+                let v1 = layer[2 * j + 1];
+                merged.push(v0 * one_minus_r + v1 * r);
+            }
+
+            layer = merged; // merge the interpolations
+        }
+
+        // ends with layer.size() = 1; i.e. all merged
+        layer[0]
     }
 
     /// Partially evaluates the polynomial by fixing the first `k` variables.
@@ -105,7 +138,22 @@ impl<F: Field> Multilinear<F> {
     /// This function panics if `partial_point.len() > self.n_vars`
     pub fn partial_eval(&self, partial_point: &[F]) -> Self {
         assert!(partial_point.len() <= self.n_vars);
-        todo!()
+
+        // TODO: don't copy here
+        let mut layer = self.evals.clone();
+        for &r in partial_point {
+            let one_minus_r = F::one() - r;
+            let mut merged = Vec::with_capacity(layer.len() / 2);
+            for j in 0..(layer.len() / 2) {
+                let v0 = layer[2 * j];
+                let v1 = layer[2 * j + 1];
+                merged.push(v0 * one_minus_r + v1 * r);
+            }
+
+            layer = merged; // merge the interpolations
+        }
+
+        Self::new(self.n_vars - partial_point.len(), layer)
     }
 
     /// Computes the univariate polynomial obtained by summing over all variables except one.
@@ -120,7 +168,21 @@ impl<F: Field> Multilinear<F> {
     ///
     /// where `j = variable_index`.
     pub fn to_univariate(&self, variable_index: usize) -> Univariate<F> {
-        todo!()
+        // TODO: assert!(variable_index < self.n_vars);
+
+        let bit = self.n_vars - 1 - variable_index;
+
+        let mut sum_0 = F::zero();
+        let mut sum_1 = F::zero();
+        for (idx, &val) in self.evals.iter().enumerate() {
+            if (idx >> variable_index) & 1 == 0 {
+                sum_0 += val;
+            } else {
+                sum_1 += val;
+            }
+        }
+
+        Univariate::new(vec![sum_0, sum_1 - sum_0])
     }
 }
 
@@ -143,7 +205,9 @@ impl<F: Field> AddAssign<&Multilinear<F>> for Multilinear<F> {
     /// Panics if `self.n_vars != rhs.n_vars`.
     fn add_assign(&mut self, rhs: &Self) {
         assert_eq!(self.n_vars, rhs.n_vars);
-        todo!()
+        for (a, &b) in self.evals.iter_mut().zip(rhs.evals.iter()) {
+            *a += b;
+        }
     }
 }
 impl<F: Field> SubAssign<&Multilinear<F>> for Multilinear<F> {
@@ -157,7 +221,9 @@ impl<F: Field> SubAssign<&Multilinear<F>> for Multilinear<F> {
     /// Panics if `self.n_vars != rhs.n_vars`.
     fn sub_assign(&mut self, rhs: &Self) {
         assert_eq!(self.n_vars, rhs.n_vars);
-        todo!()
+        for (a, &b) in self.evals.iter_mut().zip(rhs.evals.iter()) {
+            *a -= b;
+        }
     }
 }
 
@@ -266,7 +332,28 @@ impl<F: Field> Univariate<F> {
     /// such that `p(x_i) = y_i` for all `i`.
     pub fn interpolate(points: &[(F, F)]) -> Self {
         assert!(!points.is_empty(), "need at least one point");
-        todo!()
+
+        // Lagrange interpolation
+        // P(x) = \sum_i y_i * L_i(x)
+
+        let mut result = Self::zero();
+        for (i, &(x_i, y_i)) in points.iter().enumerate() {
+            let mut num = Self::constant(F::one());
+            let mut den = F::one();
+
+            // Lagrange basis fn
+            for (j, &(x_j, _)) in points.iter().enumerate() {
+                if i == j { continue; }
+                num *= &Self::new(vec![-x_j, F::one()]); // x - x_j
+                den *= x_i - x_j
+            }
+
+            // TODO: assert that den is non-zero?
+            num *= y_i / den;
+            result += &num;
+        }
+
+        result
     }
 
     /// Computes `p(x) = c_0 + c_1·x + c_2·x² + ... + c_{n-1}·x^{n-1}` for the
@@ -280,7 +367,11 @@ impl<F: Field> Univariate<F> {
     /// p(x) = c_0 + x·(c_1 + x·(c_2 + ... + x·(c_{n-2} + x·c_{n-1})...))
     /// ```
     pub fn evaluate(&self, x: F) -> F {
-        todo!()
+        let mut sum = F::zero();
+        for &c in self.coeffs.iter().rev() {
+            sum = sum * x + c;
+        }
+        sum
     }
 }
 
@@ -387,7 +478,21 @@ impl<F: Field> MulAssign<&Univariate<F>> for Univariate<F> {
     ///
     /// The coefficient of `x^k` in the product is `Σ_{i+j=k} self[i] * other[j]`.
     fn mul_assign(&mut self, other: &Self) {
-        todo!()
+        if self.coeffs.is_empty() || other.coeffs.is_empty() {
+            self.coeffs.clear();
+            return;
+        }
+
+        let a = std::mem::take(&mut self.coeffs);
+        let mut result = vec![F::zero(); a.len() + other.coeffs.len() - 1];
+
+        for (i, &ai) in a.iter().enumerate() {
+            for (j, &bj) in other.coeffs.iter().enumerate() {
+                result[i + j] += ai * bj;
+            }
+        }
+        self.coeffs = result;
+        self.trim();
     }
 }
 
@@ -404,7 +509,15 @@ impl<F: Field> MulAssign<F> for Univariate<F> {
     ///
     /// Computes `self := c * self`, scaling every coefficient by `c`.
     fn mul_assign(&mut self, rhs: F) {
-        todo!()
+        if rhs.is_zero() {
+            self.coeffs.clear();
+            return;
+        }
+
+        for c in &mut self.coeffs {
+            *c *= rhs;
+        }
+        self.trim();
     }
 }
 

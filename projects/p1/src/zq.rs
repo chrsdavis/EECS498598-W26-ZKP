@@ -8,7 +8,7 @@ use std::{
 
 use num_traits::{Inv, One, Pow, Zero};
 use serde::{Deserialize, Serialize};
-use sfs_bigint::U256;
+use sfs_bigint::{U256, U512};
 
 use crate::{Field, Random, moduli::PrimeModulus};
 
@@ -69,11 +69,11 @@ impl<Q: PrimeModulus> Zq<Q> {
     }
     // returns *self^2
     pub fn square(&self) -> Self {
-        todo!()
+        *self * *self
     }
     // Returns *self^3
     pub fn cube(&self) -> Self {
-        todo!()
+        self.square() * *self
     }
 
     //Note that this will just reduce the bytes mod Q; this does _not_ guarantee a uniform distribution!
@@ -122,7 +122,7 @@ impl<Q: PrimeModulus> Zq<Q> {
     ///
     /// Panics if any element is zero.
     pub fn batch_invert(values: &[Zq<Q>]) -> Vec<Zq<Q>> {
-        // OPTIONAL: replace me with montgomery batch inversion
+        // OPTIONAL TODO: replace me with montgomery batch inversion
         values.iter().map(|val| val.inv()).collect()
     }
 
@@ -153,7 +153,17 @@ impl<Q: PrimeModulus> Pow<u64> for Zq<Q> {
     /// for elliptic curves) to reduce the number of operations from `exp` to
     /// at most `2 · log₂(exp)`.
     fn pow(self, exp: u64) -> Self::Output {
-        todo!()
+        let mut base = self;
+        let mut e = exp;
+        let mut res = Zq::<Q>::one();
+
+        while e > 0 {
+            if (e & 1) == 1 { res *= base; }
+            base = base.square();
+            e >>= 1;
+        }
+
+        res
     }
 }
 
@@ -164,7 +174,15 @@ impl<Q: PrimeModulus> Pow<U256> for Zq<Q> {
     /// This is the same operation as [`Pow<u64>::pow`], but accepts a 256-bit
     /// exponent. Your implementation should look substantially similar.
     fn pow(self, exp: U256) -> Self::Output {
-        todo!()
+        let mut base = self;
+        let mut res = Zq::<Q>::one();
+
+        for i in 0..exp.bit_length() {
+            if exp.bit(i) { res *= base; }
+            base = base.square();
+        }
+
+        res
     }
 }
 
@@ -231,14 +249,26 @@ impl<Q: PrimeModulus> Add for Zq<Q> {
     /// Example: if `self = 10` and `rhs = 15`, then `borrowing_sub` returns
     /// `(2²⁵⁶ - 5, true)` since the subtraction underflowed.
     fn add(self, rhs: Self) -> Self::Output {
-        todo!()
+        let (sum, overflowed) = self.value.carrying_add(&rhs.value);
+
+        let reduced = if overflowed || sum >= Q::VALUE {
+            sum.borrowing_sub(&Q::VALUE).0
+        } else {
+            sum
+        };
+
+        Self::new_unchecked(reduced)
     }
 }
 impl<Q: PrimeModulus> Neg for Zq<Q> {
     type Output = Zq<Q>;
     /// Computes the additive inverse: `-self mod Q`.
     fn neg(self) -> Self::Output {
-        todo!()
+        if self.value.is_zero() {
+            self
+        } else {
+            Zq::new_unchecked(Q::VALUE.borrowing_sub(&self.value).0)
+        }
     }
 }
 
@@ -330,7 +360,10 @@ impl<Q: PrimeModulus> Mul for Zq<Q> {
     /// ```
     /// Splits a 512-bit integer into its low and high 256-bit halves: `(low, high)`.
     fn mul(self, rhs: Self) -> Self::Output {
-        todo!()
+        let prod = self.value.widening_mul(&rhs.value);
+        let reduced = (prod % U512::from(Q::VALUE)).split().0;
+
+        Zq::new_unchecked(reduced)
     }
 }
 
@@ -433,7 +466,19 @@ impl<Q: PrimeModulus> fmt::Display for Zq<Q> {
 /// Equivalently, `⌈log₂(self + 1)⌉` for nonzero values.
 impl<Q: PrimeModulus> Random for Zq<Q> {
     fn random(source: &mut impl rand::Rng) -> Self {
-        todo!()
+        let n_bits = Q::VALUE.bit_length();
+        let n_bytes = (n_bits + 7) / 8;
+
+        let mut bytes = [0u8; 32];
+        loop {
+            source.fill_bytes(&mut bytes[..n_bytes]);
+            bytes[n_bytes..].fill(0);
+
+            let candidate = U256::from_le_slice(&bytes);
+            if candidate < Q::VALUE {  // rejection sampling
+                return Zq::new_unchecked(candidate);
+            }
+        }
     }
 }
 impl<Q: PrimeModulus> Inv for Zq<Q> {
@@ -446,7 +491,36 @@ impl<Q: PrimeModulus> Inv for Zq<Q> {
     ///
     /// Panics if `self` is zero, or more generally if `gcd(self, Q::VALUE) != 1`
     fn inv(self) -> Self::Output {
-        todo!()
+        assert!(!self.is_zero(), "0 has no modular inverse");
+
+        let (mut t, mut new_t) = (Self::zero(), Self::one());
+        let (mut r, mut new_r) = (Q::VALUE, self.value);
+
+        while new_r != U256::zero() {
+            let q = r / new_r;
+
+            // r_next = r - q * new_r
+            let prod: U512 = q.widening_mul(&new_r);
+            let (prod_lo, prod_hi) = prod.split();
+            debug_assert!(prod_hi.is_zero());
+
+            let (r_next, borrowed) = r.borrowing_sub(&prod_lo);
+            debug_assert!(!borrowed);
+
+            // t_next = t - (q mod Q) * new_t
+            // since r, new_r < Q, then q < Q, so we don't need reduction
+            let q_mod = Self::new_unchecked(q);
+            let t_next = t - q_mod * new_t;
+
+            r = new_r;
+            new_r = r_next;
+
+            t = new_t;
+            new_t = t_next;
+        }
+
+        assert!(r == U256::one(), "`self` is not invertible modulo Q");
+        t
     }
 }
 
