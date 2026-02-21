@@ -171,7 +171,7 @@ impl<F: Field> Multilinear<F> {
         let mut sum_0 = F::zero();
         let mut sum_1 = F::zero();
         for (idx, &val) in self.evals.iter().enumerate() {
-            if ((idx >> bit) & 1) == 0 {
+            if (idx >> variable_index) & 1 == 0 {
                 sum_0 += val;
             } else {
                 sum_1 += val;
