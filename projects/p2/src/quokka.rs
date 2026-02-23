@@ -319,7 +319,7 @@ impl<E: EllipticCurve> InteractiveProof for OpenProtocol<E> {
             v += a[i] * c[i];
         }
         if v != stmt.value {
-            // TODO: bail
+            bail!("Quokka.Open failure: claimed evaluation mismatch");
         }
 
         Ok(())
