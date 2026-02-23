@@ -305,7 +305,7 @@ impl<E: EllipticCurve> InteractiveProof for OpenProtocol<E> {
         // Verify by checking \sum_i c_i * G_i == C'
         let claimed_commit = E::msm(&c, &generators);
         if claimed_commit != c_prime {
-            // TODO: bail
+            bail!("Quokka.Open failure: prover's claimed vector does not match derived commitment");
         }
 
         let a = Multilinear::<E::Scalar>::eq_tilde(r_bot).evals;
