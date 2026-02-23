@@ -185,7 +185,51 @@ impl<F: Field> InteractiveProof for Protocol<F> {
         g: Self::Witness,
         mut comms: Comms<Self::ProverMessage, Self::VerifierMessage>,
     ) -> ip::Result<Self::ProverOutput> {
-        todo!()
+        let n = stmt.num_vars;
+        let d = stmt.max_degree;
+    
+        let mut challenges = Vec::with_capacity(n);
+        let mut prefix = Vec::with_capacity(n); // r_i, i \in [1, j)
+
+        for round in 0..n {
+            let suffix_len = n - (round + 1);
+            let mut points: Vec<(F, F)> = Vec::with_capacity(d + 1);
+
+            let mut x = F::zero(); // iterate over x \in 0..=d
+            for _ in 0..=d {
+                let mut y = F::zero(); // evaluation sum
+
+                // Enumerate over all 2^suffix_len bool assignments
+                let num_assignments = 1usize << suffix_len;
+                for bit_set in 0..num_assignments {
+                    // p = [prefix, x, suffix]
+                    let mut p = Vec::with_capacity(n);
+                    p.extend_from_slice(&prefix);
+                    p.push(x);
+                    for i in 0..suffix_len { // push the suffix vals
+                        let ith_bit = ((bit_set >> i) & 1);
+                        let assignment = if ith_bit == 1 { F::one(); } else { F::zero(); }
+                        p.push(assignment);
+                    }
+
+                    y += g.evaluate(&p); // evaluate at p
+                }
+
+                points.push((x, y));
+                x += F::one(); // increment x
+            }
+
+            // Prover messsage
+            let gj = Univariate::interpolate(&points);
+            comms.send(gj).await?;
+
+            // Verifier message
+            let rj = comms.recv.await?;
+            prefix.push(rj);
+            challenges.push(rj);
+        }
+
+        Ok(challenges);
     }
 
     /// The sumcheck verifier algorithm.
