@@ -133,7 +133,24 @@ pub struct OpenProtocol<E: EllipticCurve>(PhantomData<E>);
 /// - The 16 evaluations are arranged into a 4×4 matrix.
 /// - The commitment is 4 group elements (one per row).
 pub fn commit<E: EllipticCurve>(poly: &Multilinear<E::Scalar>) -> (Commitment<E>, Opening<E>) {
-    todo!()
+    let l = poly.num_vars();
+    // TODO: assert l even
+    let m = 1usize << (l / 2);  // m = 2^{l/2} = \sqrt{N}
+    // TODO: assert there are N evals
+
+    let generators = E::get_generators(m); // G_0..G_{m-1}
+
+    // Compute pedersen vector commitment, c, for each row
+    // c_j = \sum_j M[i,j] * G_j
+    let mut commitments = Vec::with_capacity(m); // [c_1, ..., c_m]
+    for row in 0..m {
+        let row_start = row * m; // inclusive
+        let row_end = row_start + m; // exclusive
+        let c_row = E::msm(&poly.evals[row_start..row_end], &generators);
+        commitments.push(c_row);
+    }
+
+    (commitments, E::Scalar::zero())
 }
 
 /// Implementation of the Quokka opening protocol as an interactive proof.
@@ -186,7 +203,28 @@ impl<E: EllipticCurve> InteractiveProof for OpenProtocol<E> {
         wit: Witness<E>,
         comms: Comms<Self::ProverMessage, Self::VerifierMessage>,
     ) -> ip::Result<()> {
-        todo!()
+        let l = stmt.point.len();
+        let m = 1usize << (l / 2);
+        // TODO: assert l and m are valid
+
+        let r_top = &stmt.point[(l/2)..]; // high bits
+
+        let b = Multilinear::<E::Scalar>::eq_tilde(r_top).evals;
+        // TODO: assert len(b) == m
+
+        // Prover sends c = b^T \cdot M
+        // c_k = \sum_i b[i] * M[i,k]
+        let mut c = vec![E::Scalar::zero(); m];
+        for row in 0..m {
+            let bi = b[row];
+            let row_start = row * m;
+            for col in 0..m {
+                c[col] += bi * wit.poly.evals[row_start + col];
+            }
+        }
+
+        comms.send(c)?;
+        Ok(())
     }
 
     /// The Quokka opening verifier.
