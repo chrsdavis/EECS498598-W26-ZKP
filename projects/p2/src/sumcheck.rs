@@ -271,6 +271,32 @@ impl<F: Field> InteractiveProof for Protocol<F> {
         mut comms: Comms<Self::VerifierMessage, Self::ProverMessage>,
         rng: &mut R,
     ) -> ip::Result<Self::VerifierOutput> {
-        todo!()
+        let mut cur_claim_sum = stmt.claimed_sum;
+        let mut challenges = Vec::with_capacity(stmt.num_vars);
+
+        for round in 0..stmt.num_vars {
+            let gj = comms.recv().await?; // step 1
+
+            // Step 2 (degree check)
+            if gj.degree() > stmt.max_degree {
+                todo!(); // bail
+            }
+
+            // Step 3 (sum check)
+            let sum = gj.evaluate(F::zero()) + gj.evaluate(F::one());
+            if sum != cur_claim_sum {
+                todo!(); // bail
+            }
+
+            // Step 4 (sample challenge and send to prover)
+            let rj = F::random(rng);
+            comms.send(rj)?;
+            challenges.push(rj);
+
+            // Step 5 (update current claimed sum)
+            cur_claim_sum = gj.evaluate(rj);
+        }
+
+        Ok((cur_claim_sum, challenges))
     }
 }
