@@ -294,7 +294,13 @@ impl<E: EllipticCurve> InteractiveProof for OpenProtocol<E> {
 
         // Receive prover's claimed c
         let c = comms.recv().await?;
-        // TODO: assert len(c) == m
+        if c.len() != m {
+            bail!(
+                "Quokka.Open: prover's c len wrong; expected {}, but got {}",
+                m,
+                c.len()
+            );
+        }
 
         // Verify by checking \sum_i c_i * G_i == C'
         let claimed_commit = E::msm(&c, &generators);
