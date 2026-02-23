@@ -279,13 +279,19 @@ impl<F: Field> InteractiveProof for Protocol<F> {
 
             // Step 2 (degree check)
             if gj.degree() > stmt.max_degree {
-                todo!(); // bail
+                bail!(
+                    "sumcheck (malformed proof): polynomial from round {round+1} has invalid degree {} > maximum degree {}",
+                    gj.degree(),
+                    stmt.max_degree
+                );
             }
 
             // Step 3 (sum check)
             let sum = gj.evaluate(F::zero()) + gj.evaluate(F::one());
             if sum != cur_claim_sum {
-                todo!(); // bail
+                bail!(
+                    "sumcheck (soundness rejection): failure in round {round+1}, g_j(0)+g_j(1) = {lhs}, expected {cur_claim_sum}"
+                );
             }
 
             // Step 4 (sample challenge and send to prover)
