@@ -269,7 +269,15 @@ impl<E: EllipticCurve> InteractiveProof for OpenProtocol<E> {
     ) -> ip::Result<()> {
         let l = stmt.point.len();
         let m = 1usize << (l/2);
-        // TODO: assert l and m are valid
+        if l % 2 != 0 {
+            bail!("Quokka.Open: N must be perfect square (even number of variables)");
+        } else if stmt.comm.len() != m {
+            bail!(
+                "Quokka.Open: bad committment len; expected {} row comms, but got {}",
+                m,
+                stmt.comm.len()
+            );
+        }
 
         let generators = E::get_generators(m);
 
