@@ -205,12 +205,25 @@ impl<E: EllipticCurve> InteractiveProof for OpenProtocol<E> {
     ) -> ip::Result<()> {
         let l = stmt.point.len();
         let m = 1usize << (l / 2);
-        // TODO: assert l and m are valid
+
+        if l % 2 != 0 {
+            bail!("Quokka.Open: 2^l = N must be perfect square");
+        } else if wit.poly.num_vars() != l {
+            bail!(
+                "Quokka.Open: stmt point has shape {} but witness poly has shape {}",
+                l,
+                wit.poly.num_vars()
+            );
+        } else if wit.poly.evals.len() != m * m {
+            bail!("Quokka.Open: witness poly does not have N = M^2 evals");
+        }
 
         let r_top = &stmt.point[(l/2)..]; // high bits
 
         let b = Multilinear::<E::Scalar>::eq_tilde(r_top).evals;
-        // TODO: assert len(b) == m
+        if b.len() != m {
+            bail!("Quokka.Open: b := eq_tilde(r_high) has wrong len");
+        }
 
         // Prover sends c = b^T \cdot M
         // c_k = \sum_i b[i] * M[i,k]
