@@ -273,7 +273,7 @@ impl<E: EllipticCurve> InteractiveProof for OpenProtocol<E> {
             bail!("Quokka.Open: N must be perfect square (even number of variables)");
         } else if stmt.comm.len() != m {
             bail!(
-                "Quokka.Open: bad committment len; expected {} row comms, but got {}",
+                "Quokka.Open: bad committment len; expected {} comms, but got {}",
                 m,
                 stmt.comm.len()
             );
@@ -285,7 +285,9 @@ impl<E: EllipticCurve> InteractiveProof for OpenProtocol<E> {
         let r_top = &stmt.point[(l/2)..];
 
         let b = Multilinear::<E::Scalar>::eq_tilde(r_top).evals;
-        // TODO: assert len(b) == m
+        if b.len() != m {
+            bail!("Quokka.Open: b := eq_tilde(r_high) has wrong len");
+        }
 
         // Derive commitment: C' = <b,C> = \sum_k b[k] * C_k
         let c_prime = E::msm(&b, &stmt.comm);
