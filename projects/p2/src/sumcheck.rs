@@ -229,7 +229,7 @@ impl<F: Field> InteractiveProof for Protocol<F> {
             challenges.push(rj);
         }
 
-        Ok(challenges);
+        Ok(challenges)
     }
 
     /// The sumcheck verifier algorithm.
