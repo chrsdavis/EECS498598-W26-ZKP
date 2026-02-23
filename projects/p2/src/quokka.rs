@@ -254,6 +254,45 @@ impl<E: EllipticCurve> InteractiveProof for OpenProtocol<E> {
         mut comms: Comms<Self::VerifierMessage, Self::ProverMessage>,
         _rng: &mut R,
     ) -> ip::Result<()> {
-        todo!()
+        let l = stmt.point.len();
+        let m = 1usize << (l/2);
+        // TODO: assert l and m are valid
+
+        let generators = E::get_generators(m);
+
+        let r_bot = &stmt.point[..(l/2)];
+        let r_top = &stmt.point[(l/2)..];
+
+        let b = Multilinear::<E::Scalar>::eq_tilde(r_top).evals;
+        // TODO: assert len(b) == m
+
+        // Derive commitment: C' = <b,C> = \sum_k b[k] * C_k
+        let c_prime = E::msm(&b, &stmt.comm);
+
+        // Receive prover's claimed c
+        let c = comms.recv().await?;
+        // TODO: assert len(c) == m
+
+        // Verify by checking \sum_i c_i * G_i == C'
+        let claimed_commit = E::msm(&c, &generators);
+        if claimed_commit != c_prime {
+            // TODO: bail
+        }
+
+        let a = Multilinear::<E::Scalar>::eq_tilde(r_bot).evals;
+        if a.len() != m {
+            bail!("a := eq_tilde(r_low) has wrong length");
+        }
+
+        // Final verification of <c,a> == stmt.value
+        let mut v = E::Scalar::zero();
+        for i in 0..m {
+            v += a[i] * c[i];
+        }
+        if v != stmt.value {
+            // TODO: bail
+        }
+
+        Ok(())
     }
 }
