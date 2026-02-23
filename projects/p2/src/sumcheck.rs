@@ -207,8 +207,9 @@ impl<F: Field> InteractiveProof for Protocol<F> {
                     p.extend_from_slice(&prefix);
                     p.push(x);
                     for i in 0..suffix_len { // push the suffix vals
+                        // TODO: assert suffix_len isn't too large
                         let ith_bit = ((bit_set >> i) & 1);
-                        let assignment = if ith_bit == 1 { F::one(); } else { F::zero(); }
+                        let assignment = if ith_bit == 1 { F::one() } else { F::zero() };
                         p.push(assignment);
                     }
 
@@ -224,7 +225,7 @@ impl<F: Field> InteractiveProof for Protocol<F> {
             comms.send(gj)?;
 
             // Verifier message
-            let rj = comms.recv.await?;
+            let rj = comms.recv().await?;
             prefix.push(rj);
             challenges.push(rj);
         }
@@ -280,7 +281,8 @@ impl<F: Field> InteractiveProof for Protocol<F> {
             // Step 2 (degree check)
             if gj.degree() > stmt.max_degree {
                 bail!(
-                    "sumcheck (malformed proof): polynomial from round {round+1} has invalid degree {} > maximum degree {}",
+                    "sumcheck (malformed proof): polynomial from round {} has invalid degree {} > maximum degree {}",
+                    round + 1,
                     gj.degree(),
                     stmt.max_degree
                 );
@@ -290,7 +292,8 @@ impl<F: Field> InteractiveProof for Protocol<F> {
             let sum = gj.evaluate(F::zero()) + gj.evaluate(F::one());
             if sum != cur_claim_sum {
                 bail!(
-                    "sumcheck (soundness rejection): failure in round {round+1}, g_j(0)+g_j(1) = {lhs}, expected {cur_claim_sum}"
+                    "sumcheck (soundness rejection): failure in round {}, g_j(0)+g_j(1) = {sum}, expected {cur_claim_sum}",
+                    round + 1
                 );
             }
 
