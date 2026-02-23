@@ -221,7 +221,7 @@ impl<F: Field> InteractiveProof for Protocol<F> {
 
             // Prover messsage
             let gj = Univariate::interpolate(&points);
-            comms.send(gj).await?;
+            comms.send(gj)?;
 
             // Verifier message
             let rj = comms.recv.await?;
