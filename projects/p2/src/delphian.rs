@@ -263,8 +263,6 @@ impl<E: EllipticCurve> InteractiveProof for Protocol<E> {
 
         let m = stmt.A.rows;
         let n = stmt.A.cols;
-    
-        // TODO: add asserts to make sure input is valid
 
         // z has `col_vars`` vars, and w has `(col_vars-1)`` vars
         let row_vars = m.ilog2() as usize;
