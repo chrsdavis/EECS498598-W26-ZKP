@@ -288,7 +288,7 @@ impl<E: EllipticCurve> InteractiveProof for Protocol<E> {
         // Get random challenge tau from verifier
         let tau = comms.recv().await?;
         if tau.len() != row_vars {
-            // TODO: bail
+            bail!("Delphian: expected tau length {row_vars}, got {}", tau.len());
         }
 
         // Main sumcheck witness h~(X) = eq~(tau,X) * (Az~(X)*Bz~(X) - Cz~(X))
