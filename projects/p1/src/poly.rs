@@ -171,8 +171,6 @@ impl<F: Field> Multilinear<F> {
     pub fn to_univariate(&self, variable_index: usize) -> Univariate<F> {
         // TODO: assert!(variable_index < self.n_vars);
 
-        let bit = self.n_vars - 1 - variable_index;
-
         let mut sum_0 = F::zero();
         let mut sum_1 = F::zero();
         for (idx, &val) in self.evals.iter().enumerate() {
