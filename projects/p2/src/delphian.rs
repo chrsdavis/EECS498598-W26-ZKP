@@ -476,7 +476,7 @@ impl<E: EllipticCurve> InteractiveProof for Protocol<E> {
         let (h_eval, r_row) =
             sumcheck::Protocol::<E::Scalar>::verifier(sumcheck_stmt, sumcheck_comms, rng).await?;
         if r_row.len() != row_vars {
-            // TODO: bail
+            bail!("Delphian: main sumcheck returned wrong challenge length");
         }
 
         // misc. pub objects for checks
@@ -486,7 +486,7 @@ impl<E: EllipticCurve> InteractiveProof for Protocol<E> {
 
         let x_tilde = stmt.x.multilinear_extension();
         if x_tilde.num_vars() != w_vars {
-            // TODO: bail
+            bail!("Delphian: x~ has {} vars but expected w_vars={w_vars}", x_tilde.num_vars());
         }
 
         // Sumchecks and opens for each matrix
@@ -518,7 +518,7 @@ impl<E: EllipticCurve> InteractiveProof for Protocol<E> {
             let (p_eval, r_col) =
                 sumcheck::Protocol::<E::Scalar>::verifier(mv_sumcheck_stmt, mv_sumcheck_comms, rng).await?;
             if r_col.len() != col_vars {
-                // TODO: bail
+                bail!("Delphian: mv sumcheck {label} returned wrong challenge length");
             }
 
             // Receive w_eval to form Quokka stmt
