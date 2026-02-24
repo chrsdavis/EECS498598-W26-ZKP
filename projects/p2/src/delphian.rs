@@ -247,7 +247,134 @@ impl<E: EllipticCurve> InteractiveProof for Protocol<E> {
     ) -> ip::Result<()> {
         let sub_comms = comms.establish_subprotocol::<String, i32>("").await?;
         let value = comms.recv().await?;
-        todo!()
+
+        let m = stmt.A.rows;
+        let n = stmt.A.cols;
+    
+        // TODO: add asserts to make sure input is valid
+
+        // z has `col_vars`` vars, and w has `(col_vars-1)`` vars
+        let row_vars = m.ilog2() as usize;
+        let col_vars = n.ilog2() as usize;
+
+        // Compute z and is MLE
+        let z = stmt.z(&wit);
+        let z_tilde: Multilinear<E::Scalar> = z.multilinear_extension();
+
+        // Commit to witness MLE w_tilde with quokka and send
+        let w_tilde: Multilinear<E::Scalar> = wit.w.multilinear_extension();
+        let (w_comm, w_opening) = quokka::commit::<E>(&w_tilde);
+        comms.send(ProverMessage::PolyComm(w_comm.clone()))?;
+
+        // Get random challenge tau from verifier
+        let tau = comms.recv().await?;
+        if tau.len() != row_vars {
+            // TODO: bail
+        }
+
+        // Main sumcheck witness h~(X) = eq~(tau,X) * (Az~(X)*Bz~(X) - Cz~(X))
+        // TODO: this is kind of clunky
+        let Az_dense = stmt.A.mul_sparse(&z).to_dense();
+        let Bz_dense = stmt.B.mul_sparse(&z).to_dense();
+        let Cz_dense = stmt.C.mul_sparse(&z).to_dense();
+
+        let eq_tilde_tau = Multlinear::<E::Scalar>::eq_tilde(tau);
+        let Az_tilde = Multilinear::new(row_vars, Az_dense);
+        let Bz_tilde = Multilinear::new(row_vars, Bz_dense);
+        let Cz_tilde = Multilinear::new(row_vars, Cz_dense);
+
+        // Note that max degree is 3 because of the eq*Az*Bz term
+        let max_h_degree = 3;
+        let combiner = |vals: &[E::Scalar]| vals[0] * (vals[1] * vals[2] - vals[3]);
+        let h = CombinedMLE::new(
+            max_h_degree, combiner, vec![eq_tilde_tau, Az_tilde, Bz_tilde, Cz_tilde],
+        );
+
+        // Run sumcheck as subprotocol
+        let sumcheck_comms = comms
+            .establish_subprotocol::<sumcheck::ProverMessage<E::Scalar>, sumcheck::VerifierMessage<E::Scalar>>(
+                "main_sumcheck",
+            )
+            .await?;
+        let sumcheck_stmt = sumcheck::Statement {
+            claimed_sum: E::Scalar::zero(),
+            num_vars: row_vars,
+            max_degree: max_h_degree,
+        };
+
+        let r_row = sumcheck::Protocol::<E::Scalar>::prover(sumcheck_stmt, h, sumcehck_comms).await?;
+        if r_row.len() != r_vars {
+            // TODO: bail
+        }
+
+        // Public matrix MLEs
+        let A_tilde = stmt.A.multilinear_extension();
+        let B_tilde = stmt.B.multilinear_extension();
+        let C_tilde = stmt.C.multilinear_extension();
+
+        // Process each matrix
+        let cases: [(&'static str, &Multilinear<E::Scalar>, &'static str, &'static str); 3] = [
+            ("A", &A_tilde, "mv_sumcheck_A", "open_w_A"),
+            ("B", &B_tilde, "mv_sumcheck_B", "open_w_B"),
+            ("C", &C_tilde, "mv_sumcheck_C", "open_w_C"),
+        ];
+
+        for (label, M_tilde, mv_sumcheck_name, open_name) in cases {
+            // M_row(X) = M~(r_row, X)
+            let M_row = M_tilde.partial_eval(&r_row);
+
+            // p_M(X) = M_row(X) * z~(X)
+            let p = CombinedMLE::new(
+                2,
+                |v: &[E::Scalar]| v[0] * v[1],
+                vec![M_row, z_tilde.clone()],
+            );
+
+            // Compute and send claimed sum v_M
+            let v_M = p.sum_over_hypercube();
+            comms.send(ProverMessage::Value(v_M))?;
+
+            // Run sumcheck for p_M
+            let mv_sumcheck_comms = comms
+                .establish_subprotocol::<sumcheck::ProverMessage<E::Scalar>, sumcheck::VerifierMessage<E::Scalar>>(
+                    mv_sumcheck_name,
+                )
+                .await?;
+            let mv_sumcheck_stmt = sumcheck::Statement {
+                claimed_sum: v_M,
+                num_vars: col_vars,
+                max_degree: 2,
+            };
+
+            let r_col = sumcheck::Protocol::<E::Scalar>::prover(mv_sumcheck_stmt, p, mv_sumcheck_comms).await?;
+            if r_col.len() != c_vars {
+                // TODO: bail
+            }
+
+            // Open witness w_tilde for low coords of r_col
+            let r_low = r_col[..w_vars].to_vec();
+            let w_eval = w_tilde.evaluate(&r_low);
+
+            // Send claimed evaluation (so verifier can make Quokkka.stmt)
+            comms.send(ProverMessage::Value(w_eval))?;
+
+            // Quokka.open
+            let open_comms = comms
+                .establish_subprotocol::<quokka::ProverMessage<E>, quokka::VerifierMessage>(open_name)
+                .await?;
+            let open_stmt = quokka::Statement::<E> {
+                comm: w_comm.clone(),
+                point: r_low,
+                value: w_eval,
+            };
+            let open_wit = quokka::Witness::<E> {
+                poly: w_tilde.clone(),
+                _opening: w_opening,
+            };
+            quokka::OpenProtocol::<E>::prover(open_stmt, open_wit, open_comms).await?;
+        }
+
+        Ok(())
     }
 
     /// The Delphian verifier algorithm.
