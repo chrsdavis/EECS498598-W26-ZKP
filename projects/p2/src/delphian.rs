@@ -245,9 +245,6 @@ impl<E: EllipticCurve> InteractiveProof for Protocol<E> {
         wit: Self::Witness,
         mut comms: Comms<Self::ProverMessage, Self::VerifierMessage>,
     ) -> ip::Result<()> {
-        let sub_comms = comms.establish_subprotocol::<String, i32>("").await?;
-        let value = comms.recv().await?;
-
         let m = stmt.A.rows;
         let n = stmt.A.cols;
     
