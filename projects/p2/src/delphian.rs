@@ -269,7 +269,14 @@ impl<E: EllipticCurve> InteractiveProof for Protocol<E> {
         // z has `col_vars`` vars, and w has `(col_vars-1)`` vars
         let row_vars = m.ilog2() as usize;
         let col_vars = n.ilog2() as usize;
-        let w_vars = col_vars - 1;
+        let w_vars = stmt.x.size.ilog2() as usize;;
+
+        if col_vars != w_vars + 1 {
+            bail!("Delphian: expected col_vars = w_vars + 1 (since n = 2*|w|)");
+        }
+        if w_vars % 2 != 0 {
+            bail!("Delphian: Quokka requires witness MLE num_vars to be even; got w_vars={w_vars}");
+        }
 
         // Compute z and is MLE
         let z = stmt.z(&wit);
