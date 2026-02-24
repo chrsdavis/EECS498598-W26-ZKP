@@ -426,19 +426,29 @@ impl<E: EllipticCurve> InteractiveProof for Protocol<E> {
         mut comms: Comms<Self::VerifierMessage, Self::ProverMessage>,
         rng: &mut R,
     ) -> ip::Result<()> {
+        // Dimension assertions
+        if !stmt.A.rows.is_power_of_two() || !stmt.A.cols.is_power_of_two() {
+            bail!("Delphian: rows/cols must be powers of two");
+        }
+        if stmt.A.rows != stmt.B.rows || stmt.A.rows != stmt.C.rows
+            || stmt.A.cols != stmt.B.cols || stmt.A.cols != stmt.C.cols
+        { // TODO: do this more elegantly
+            bail!("Delphian: A/B/C dimensions mismatch");
+        }
+
         let m = stmt.A.rows;
         let n = stmt.A.cols;
 
-        // TODO: bounds checking and bailing
-
         let row_vars = m.ilog2() as usize;
         let col_vars = n.ilog2() as usize;
-        if col_vars == 0 {
-            // TODO: bail
-        }
-        let w_vars = col_vars - 1;
-        if w_vars % 2 != 0 {
-           // TODO: bail
+        let w_vars = stmt.x.size.ilog2() as usize;
+
+        if stmt.x.size.next_power_of_two() != stmt.x.size {
+            bail!("Delphian: |x| must be power of two");
+        } else if col_vars != w_vars + 1 {
+            bail!("Delphian: expected col_vars = w_vars + 1 (since n = 2*|w|)");
+        } else if w_vars % 2 != 0 {
+            bail!("Delphian: Quokka requires witness MLE num_vars to be even; got w_vars={w_vars}");
         }
 
         // Receive witness commitment
