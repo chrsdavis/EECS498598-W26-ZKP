@@ -363,7 +363,7 @@ impl<E: EllipticCurve> InteractiveProof for Protocol<E> {
 
             let r_col = sumcheck::Protocol::<E::Scalar>::prover(mv_sumcheck_stmt, p, mv_sumcheck_comms).await?;
             if r_col.len() != col_vars {
-                // TODO: bail
+                bail!("Delphian: mv sumcheck {label} returned wrong challenge length");
             }
 
             // Open witness w_tilde for low coords of r_col
