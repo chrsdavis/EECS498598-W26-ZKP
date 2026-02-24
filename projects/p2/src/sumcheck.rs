@@ -208,7 +208,7 @@ impl<F: Field> InteractiveProof for Protocol<F> {
                     p.push(x);
                     for i in 0..suffix_len { // push the suffix vals
                         // TODO: assert suffix_len isn't too large
-                        let ith_bit = ((bit_set >> i) & 1);
+                        let ith_bit = (bit_set >> i) & 1;
                         let assignment = if ith_bit == 1 { F::one() } else { F::zero() };
                         p.push(assignment);
                     }
