@@ -245,6 +245,22 @@ impl<E: EllipticCurve> InteractiveProof for Protocol<E> {
         wit: Self::Witness,
         mut comms: Comms<Self::ProverMessage, Self::VerifierMessage>,
     ) -> ip::Result<()> {
+        // Dimension assertions
+        if !stmt.A.rows.is_power_of_two() || !stmt.A.cols.is_power_of_two() {
+            bail!("Delphian: rows/cols must be powers of two");
+        }
+        if stmt.A.rows != stmt.B.rows || stmt.A.rows != stmt.C.rows
+            || stmt.A.cols != stmt.B.cols || stmt.A.cols != stmt.C.cols
+        { // TODO: do this more elegantly...
+            bail!("Delphian: A/B/C dimensions mismatch");
+        }
+        if stmt.x.size != wit.w.size {
+            bail!("Delphian: require |x| == |w| (so z = x||w is a half-split)");
+        }
+        if stmt.x.size + wit.w.size != stmt.A.cols {
+            bail!("Delphian: |x|+|w| must equal number of columns");
+        }
+
         let m = stmt.A.rows;
         let n = stmt.A.cols;
     
@@ -253,7 +269,6 @@ impl<E: EllipticCurve> InteractiveProof for Protocol<E> {
         // z has `col_vars`` vars, and w has `(col_vars-1)`` vars
         let row_vars = m.ilog2() as usize;
         let col_vars = n.ilog2() as usize;
-
         let w_vars = col_vars - 1;
 
         // Compute z and is MLE
