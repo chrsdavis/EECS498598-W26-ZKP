@@ -321,7 +321,7 @@ impl<E: EllipticCurve> InteractiveProof for Protocol<E> {
 
         let r_row = sumcheck::Protocol::<E::Scalar>::prover(sumcheck_stmt, h, sumcheck_comms).await?;
         if r_row.len() != row_vars {
-            // TODO: bail
+            bail!("Delphian: main sumcheck returned wrong challenge length");
         }
 
         // Public matrix MLEs
