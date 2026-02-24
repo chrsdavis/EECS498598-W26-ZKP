@@ -280,7 +280,7 @@ impl<E: EllipticCurve> InteractiveProof for Protocol<E> {
         let Bz_dense = stmt.B.mul_sparse(&z).to_dense();
         let Cz_dense = stmt.C.mul_sparse(&z).to_dense();
 
-        let eq_tilde_tau = Multlinear::<E::Scalar>::eq_tilde(tau);
+        let eq_tilde_tau = Multilinear::<E::Scalar>::eq_tilde(&tau);
         let Az_tilde = Multilinear::new(row_vars, Az_dense);
         let Bz_tilde = Multilinear::new(row_vars, Bz_dense);
         let Cz_tilde = Multilinear::new(row_vars, Cz_dense);
