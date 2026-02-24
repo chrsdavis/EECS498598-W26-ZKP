@@ -46,7 +46,7 @@ use crate::{
     sumcheck,
 };
 use anyhow::bail;
-use p1::{One, Random, Zero, poly::Multilinear};
+use p1::{One, Random, Zero, poly::Multilinear, poly::Univariate};
 use std::marker::PhantomData;
 
 /// Messages sent from the prover to the verifier in the Delphian protocol.
@@ -294,9 +294,7 @@ impl<E: EllipticCurve> InteractiveProof for Protocol<E> {
 
         // Run sumcheck as subprotocol
         let sumcheck_comms = comms
-            .establish_subprotocol::<sumcheck::ProverMessage<E::Scalar>, sumcheck::VerifierMessage<E::Scalar>>(
-                "main_sumcheck",
-            )
+            .establish_subprotocol::<Univariate<E::Scalar>, E::Scalar>("main_sumcheck")
             .await?;
         let sumcheck_stmt = sumcheck::Statement {
             claimed_sum: E::Scalar::zero(),
@@ -338,9 +336,7 @@ impl<E: EllipticCurve> InteractiveProof for Protocol<E> {
 
             // Run sumcheck for p_M
             let mv_sumcheck_comms = comms
-                .establish_subprotocol::<sumcheck::ProverMessage<E::Scalar>, sumcheck::VerifierMessage<E::Scalar>>(
-                    mv_sumcheck_name,
-                )
+                .establish_subprotocol::<Univariate<E::Scalar>, E::Scalar>(mv_sc_name)
                 .await?;
             let mv_sumcheck_stmt = sumcheck::Statement {
                 claimed_sum: v_M,
@@ -443,9 +439,7 @@ impl<E: EllipticCurve> InteractiveProof for Protocol<E> {
 
         // Main sumcheck verifier for R1CS poly
         let sumcheck_comms = comms
-            .establish_subprotocol::<sumcheck::VerifierMessage<E::Scalar>, sumcheck::ProverMessage<E::Scalar>>(
-                "main_sumcheck",
-            )
+            .establish_subprotocol::<E::Scalar, Univariate<E::Scalar>>("main_sumcheck")
             .await?;
         let sumcheck_stmt = sumcheck::Statement {
             claimed_sum: E::Scalar::zero(),
@@ -487,9 +481,7 @@ impl<E: EllipticCurve> InteractiveProof for Protocol<E> {
 
             // mv sumcheck verifier
             let mv_sumcheck_comms = comms
-                .establish_subprotocol::<sumcheck::VerifierMessage<E::Scalar>, sumcheck::ProverMessage<E::Scalar>>(
-                    mv_sumcheck_name,
-                )
+                .establish_subprotocol::<E::Scalar, Univariate<E::Scalar>>(mv_sc_name)
                 .await?;
             let mv_sumcheck_stmt = sumcheck::Statement {
                 claimed_sum: v_M,
