@@ -303,7 +303,7 @@ impl<E: EllipticCurve> InteractiveProof for Protocol<E> {
         };
 
         let r_row = sumcheck::Protocol::<E::Scalar>::prover(sumcheck_stmt, h, sumcehck_comms).await?;
-        if r_row.len() != r_vars {
+        if r_row.len() != row_vars {
             // TODO: bail
         }
 
@@ -347,7 +347,7 @@ impl<E: EllipticCurve> InteractiveProof for Protocol<E> {
             };
 
             let r_col = sumcheck::Protocol::<E::Scalar>::prover(mv_sumcheck_stmt, p, mv_sumcheck_comms).await?;
-            if r_col.len() != c_vars {
+            if r_col.len() != col_vars {
                 // TODO: bail
             }
 
@@ -411,6 +411,141 @@ impl<E: EllipticCurve> InteractiveProof for Protocol<E> {
         mut comms: Comms<Self::VerifierMessage, Self::ProverMessage>,
         rng: &mut R,
     ) -> ip::Result<()> {
-        todo!()
+        let m = stmt.A.rows;
+        let n = stmt.A.cols;
+
+        // TODO: bounds checking and bailing
+
+        let row_vars = m.ilog2() as usize;
+        let col_vars = n.ilog2() as usize;
+        if col_vars == 0 {
+            // TODO: bail
+        }
+        let w_vars = col_vars - 1;
+        if w_vars % 2 != 0 {
+           // TODO: bail
+        }
+
+        // Receive witness commitment
+        let w_comm = match comms.recv().await? {
+            ProverMessage::PolyComm(c) => c,
+            other => bail!("Delphian: expected ProverMessage::PolyComm, got {:?}", other),
+        };
+
+        // Sample and send challenge tau
+        let mut tau = Vec::with_capacity(row_vars);
+        for _ in 0..row_vars {
+            tau.push(E::Scalar::random(rng));
+        }
+        comms.send(tau.clone())?;
+
+        // Main sumcheck verifier for R1CS poly
+        let sumcheck_comms = comms
+            .establish_subprotocol::<sumcheck::VerifierMessage<E::Scalar>, sumcheck::ProverMessage<E::Scalar>>(
+                "main_sumcheck",
+            )
+            .await?;
+        let sumcheck_stmt = sumcheck::Statement {
+            claimed_sum: E::Scalar::zero(),
+            num_vars: row_vars,
+            max_degree: 3,
+        };
+        let (h_eval, r_row) =
+            sumcheck::Protocol::<E::Scalar>::verifier(sumcheck_stmt, sumcheck_comms, rng).await?;
+        if r_row.len() != row_vars {
+            // TODO: bail
+        }
+
+        // misc. pub objects for checks
+        let A_tilde = stmt.A.multilinear_extension();
+        let B_tilde = stmt.B.multilinear_extension();
+        let C_tilde = stmt.C.multilinear_extension();
+
+        let x_tilde = stmt.x.multilinear_extension();
+        if x_tilde.num_vars() != w_vars {
+            // TODO: bail
+        }
+
+        // Sumchecks and opens for each matrix
+        let mut v = [E::Scalar::zero(); 3];
+
+        let cases: [(&'static str, &Multilinear<E::Scalar>, &'static str, &'static str, usize); 3] = [
+            ("A", &A_tilde, "mv_sumcheck_A", "open_w_A", 0),
+            ("B", &B_tilde, "mv_sumcheck_B", "open_w_B", 1),
+            ("C", &C_tilde, "mv_sumcheck_C", "open_w_C", 2),
+        ];
+
+        for (label, M_tilde, mv_sumcheck_name, open_name, idx) in cases {
+            // receive v_M from prover
+            let v_M = match comms.recv().await? {
+                ProverMessage::Value(x) => x,
+                other => bail!("Delphian: expected Value(v_M) for {}, got {:?}", label, other),
+            };
+            v[idx] = v_M;
+
+            // mv sumcheck verifier
+            let mv_sumcheck_comms = comms
+                .establish_subprotocol::<sumcheck::VerifierMessage<E::Scalar>, sumcheck::ProverMessage<E::Scalar>>(
+                    mv_sumcheck_name,
+                )
+                .await?;
+            let mv_sumcheck_stmt = sumcheck::Statement {
+                claimed_sum: v_M,
+                num_vars: col_vars,
+                max_degree: 2,
+            };
+            let (p_eval, r_col) =
+                sumcheck::Protocol::<E::Scalar>::verifier(mv_sumcheck_stmt, mv_sumcheck_comms, rng).await?;
+            if r_col.len() != col_vars {
+                // TODO: bail
+            }
+
+            // Receive w_eval to form Quokka stmt
+            let w_eval = match comms.recv().await? {
+                ProverMessage::Value(x) => x,
+                other => bail!("Delphian: expected ProverMessage::Value(w_eval) for {}, got {:?}", label, other),
+            };
+
+            // Verify Quokka.open(w_comm, r_low, w_eval)
+            let r_low = r_col[..w_vars].to_vec();
+            let open_comms = comms
+                .establish_subprotocol::<quokka::VerifierMessage, quokka::ProverMessage<E>>(open_name)
+                .await?;
+            let open_stmt = quokka::Statement::<E> {
+                comm: w_comm.clone(),
+                point: r_low.clone(),
+                value: w_eval,
+            };
+            quokka::OpenProtocol::<E>::verifier(open_stmt, open_comms, rng).await?;
+
+            // Reconstruct z~(r_col) = (1-t)*x~(r_low) + t*w~(r_low)
+            // t is the last coordinate
+            let t = r_col[w_vars];
+            let x_eval = x_tilde.evaluate(&r_low);
+            let z_eval = (E::Scalar::one() - t) * x_eval + t * w_eval;
+
+            // compute M~(r_row, r_col)
+            let mut pt = Vec::with_capacity(r_row.len() + r_col.len());
+            pt.extend_from_slice(&r_row);
+            pt.extend_from_slice(&r_col);
+            let M_val = M_tilde.evaluate(&pt);
+
+            // point check: p_eval == M_val * z_eval
+            if p_eval != M_val * z_eval {
+                bail!(
+                    "Delphian: {} mv point check failed (p_eval != M(r_row,r_col)*z(r_col), i.e., `p_M(r'') ≠ M̃(r', r'') · z̃(r'')`)",
+                    label
+                );
+            }
+        }
+
+        // Final consistency check: h~(r_row) == eq~(tau, r_row) * (vA*vB - vC)
+        let eq_eval = Multilinear::<E::Scalar>::eq_tilde(&tau).evaluate(&r_row);
+        let rhs = eq_eval * (v[0] * v[1] - v[2]); // vA*vB - vC
+        if h_eval != rhs {
+            bail!("Delphian: final check failed; `h̃(r') ≠ eq̃(τ, r') · (v_A · v_B - v_C)`");
+        }
+
+        Ok(())
     }
 }
