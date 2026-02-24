@@ -336,7 +336,7 @@ impl<E: EllipticCurve> InteractiveProof for Protocol<E> {
 
             // Run sumcheck for p_M
             let mv_sumcheck_comms = comms
-                .establish_subprotocol::<Univariate<E::Scalar>, E::Scalar>(mv_sc_name)
+                .establish_subprotocol::<Univariate<E::Scalar>, E::Scalar>(mv_sumcheck_name)
                 .await?;
             let mv_sumcheck_stmt = sumcheck::Statement {
                 claimed_sum: v_M,
@@ -481,7 +481,7 @@ impl<E: EllipticCurve> InteractiveProof for Protocol<E> {
 
             // mv sumcheck verifier
             let mv_sumcheck_comms = comms
-                .establish_subprotocol::<E::Scalar, Univariate<E::Scalar>>(mv_sc_name)
+                .establish_subprotocol::<E::Scalar, Univariate<E::Scalar>>(mv_sumcheck_name)
                 .await?;
             let mv_sumcheck_stmt = sumcheck::Statement {
                 claimed_sum: v_M,
