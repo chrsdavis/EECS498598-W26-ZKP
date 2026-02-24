@@ -257,6 +257,8 @@ impl<E: EllipticCurve> InteractiveProof for Protocol<E> {
         let row_vars = m.ilog2() as usize;
         let col_vars = n.ilog2() as usize;
 
+        let w_vars = col_vars - 1;
+
         // Compute z and is MLE
         let z = stmt.z(&wit);
         let z_tilde: Multilinear<E::Scalar> = z.multilinear_extension();
