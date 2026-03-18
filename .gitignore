@@ -1,2 +1,22 @@
+# LaTeX build artifacts
+*.aux
+*.log
+*.out
+*.toc
+*.lof
+*.lot
+*.fls
+*.fdb_latexmk
+*.synctex.gz
+*.bbl
+*.blg
+*.nav
+*.snm
+*.vrb
+
+# Compiled lecture note PDFs
+lecture_notes/*.pdf
+
+# IDE / OS artifacts
 .vscode
 .DS_Store
