@@ -142,7 +142,58 @@ pub fn prove<E: EllipticCurve>(
 ) -> Proof<E> {
     // Cross-consistency between statement and witness.
     assert_eq!(statement.point.len(), witness.poly.num_vars(), "point.len() != num_vars");
-    todo!()
+
+    let l = statement.point.len();
+    assert!(l.is_multiple_of(2), "point must have even length");
+
+    let num_rows = 1usize << (l / 2);
+    assert_eq!(statement.comm_rows.len(), num_rows, "comm_rows.len() != sqrt(N)");
+    assert_eq!(params.vec_gens.len(), num_rows, "vec_gens.len() != sqrt(N)");
+    assert_eq!(witness.openings.len(), num_rows, "openings.len() != sqrt(N)");
+    assert_eq!(witness.poly.evals.len(), num_rows * num_rows, "poly.evals.len() != N");
+
+    let r_bot = &statement.point[..(l / 2)];
+    let r_top = &statement.point[(l / 2)..];
+
+    let a = Multilinear::<E::Scalar>::eq_tilde(r_bot).evals;
+    let b = Multilinear::<E::Scalar>::eq_tilde(r_top).evals;
+    assert_eq!(a.len(), num_rows, "eq_tilde(r_bot).len() != sqrt(N)");
+    assert_eq!(b.len(), num_rows, "eq_tilde(r_top).len() != sqrt(N)");
+
+    // Compute c = b^T M, the hidden row-combination vector.
+    let mut c = vec![E::Scalar::zero(); num_rows];
+    for (row, &b_i) in witness.poly.evals.chunks(num_rows).zip(&b) {
+        for (c_j, &m_ij) in c.iter_mut().zip(row) {
+            *c_j += b_i * m_ij;
+        }
+    }
+
+    let derived_eval = pedersen::inner_product(&a, &c);
+    assert_eq!(witness.eval, derived_eval, "witness.eval != f(point)");
+
+    // Homomorphically derive the commitment to c = b^T M and its randomness.
+    let comm_bm = E::msm(&b, &statement.comm_rows);
+    let r_bm = pedersen::inner_product(&b, &witness.openings);
+
+    trans.append_message("quokka_open_protocol", ());
+    trans.append_message("quokka_open_params", params);
+    trans.append_message("quokka_open_statement", statement);
+    trans.append_message("quokka_open_derived_comm", &comm_bm);
+
+    let dp_statement = pedersen::dot_product::Statement {
+        a,
+        comm_x: comm_bm,
+        comm_result: statement.comm_eval,
+    };
+    let dp_witness = pedersen::dot_product::Witness {
+        x: c,
+        r_x: r_bm,
+        result: witness.eval,
+        r_result: witness.r_eval,
+    };
+
+    let dp_proof = pedersen::dot_product::prove(params, &dp_statement, &dp_witness, trans, &mut rng);
+    Proof { dp_proof }
 }
 
 /// Verify an opening proof.
@@ -156,5 +207,33 @@ pub fn verify<E: EllipticCurve>(
     proof: &Proof<E>,
     trans: &mut Transcript,
 ) -> Result<()> {
-    todo!()
+    let l = statement.point.len();
+    anyhow::ensure!(l.is_multiple_of(2), "point must have even length");
+
+    let num_rows = 1usize << (l / 2);
+    anyhow::ensure!(statement.comm_rows.len() == num_rows, "comm_rows.len() != sqrt(N)");
+    anyhow::ensure!(params.vec_gens.len() == num_rows, "vec_gens.len() != sqrt(N)");
+
+    let r_bot = &statement.point[..(l / 2)];
+    let r_top = &statement.point[(l / 2)..];
+
+    let a = Multilinear::<E::Scalar>::eq_tilde(r_bot).evals;
+    let b = Multilinear::<E::Scalar>::eq_tilde(r_top).evals;
+    anyhow::ensure!(a.len() == num_rows, "eq_tilde(r_bot).len() != sqrt(N)");
+    anyhow::ensure!(b.len() == num_rows, "eq_tilde(r_top).len() != sqrt(N)");
+
+    let comm_bm = E::msm(&b, &statement.comm_rows);
+
+    trans.append_message("quokka_open_protocol", ());
+    trans.append_message("quokka_open_params", params);
+    trans.append_message("quokka_open_statement", statement);
+    trans.append_message("quokka_open_derived_comm", &comm_bm);
+
+    let dp_statement = pedersen::dot_product::Statement {
+        a,
+        comm_x: comm_bm,
+        comm_result: statement.comm_eval,
+    };
+
+    pedersen::dot_product::verify(params, &dp_statement, &proof.dp_proof, trans)
 }
