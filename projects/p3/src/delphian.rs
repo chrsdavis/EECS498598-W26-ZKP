@@ -204,6 +204,14 @@ pub struct Proof<E: EllipticCurve> {
     pub final_equals_proof: pedersen::equals::Proof<E>,
 }
 
+fn matrix_entry_poly<F: p1::Field>(m_eval: &[F]) -> F {
+    m_eval[0] * m_eval[1]
+}
+
+fn phase1_combiner<F: p1::Field>(evals: &[F]) -> F {
+    evals[0] * (evals[1] * evals[2] - evals[3])
+}
+
 /// Produce a ZK proof that the witness satisfies the R1CS instance `(A, B, C, x)`.
 ///
 /// The protocol has several phases, each building on the previous:
@@ -259,7 +267,207 @@ pub fn prove<E: EllipticCurve>(
     let x_tilde = statement.x.multilinear_extension();
 
     let num_rows_w = 1 << (w_tilde.num_vars() / 2);
-    todo!()
+
+    // common transcript prefix and witness commitment
+    trans.append_message("zk_delphian_protocol", ());
+    trans.append_message("zk_delphian_params", params);
+    trans.append_message("zk_delphian_statement", statement);
+
+    let quokka_params = params.quokka_params();
+    let w_openings = (0..num_rows_w)
+        .map(|_| E::Scalar::random(&mut rng))
+        .collect::<Vec<_>>();
+    let comm_w = quokka::commit(&w_tilde, &w_openings, &quokka_params);
+    trans.append_message("zk_delphian_witness_commitment", &comm_w);
+
+    let tau = (0..log_rows)
+        .map(|_| trans.get_challenge("zk_delphian_tau"))
+        .collect::<Vec<E::Scalar>>();
+
+    // phase 1: main sumcheck on h(X) = eq(tau, X) * (Az(X) * Bz(X) - Cz(X))
+    let Az_tilde = statement.A.mul_sparse(&z).multilinear_extension();
+    let Bz_tilde = statement.B.mul_sparse(&z).multilinear_extension();
+    let Cz_tilde = statement.C.mul_sparse(&z).multilinear_extension();
+    let eq_tau = Multilinear::eq_tilde(&tau);
+
+    let h_poly = CombinedMLE::new(
+        3,
+        phase1_combiner::<E::Scalar>,
+        vec![eq_tau, Az_tilde, Bz_tilde, Cz_tilde],
+    );
+
+    let zero = E::Scalar::zero();
+    let comm_zero = pedersen::commit(zero, zero, &params.scalar_gens);
+    let h_stmt = sumcheck::Statement {
+        comm_sum: comm_zero,
+        num_vars: log_rows,
+        max_degree: 3,
+    };
+    let h_wit = sumcheck::Witness {
+        polynomial: h_poly,
+        sum: zero,
+        r_sum: zero,
+    };
+    let (sc_phase1_proof, r_prime, r_h_final) =
+        sumcheck::prove(&params.sc_phase1_params(), &h_stmt, &h_wit, trans, &mut rng);
+
+    // precompute the 3 phase 2 polynomials and their committed sums
+    let mut matrix_polys = Vec::with_capacity(3);
+    let mut v_comms = Vec::with_capacity(3);
+    for M in [&statement.A, &statement.B, &statement.C] {
+        let M_tilde = M.multilinear_extension();
+        let M_at_r_prime = M_tilde.partial_eval(&r_prime);
+        let p_M = CombinedMLE::new(
+            2,
+            matrix_entry_poly::<E::Scalar>,
+            vec![M_at_r_prime, z_tilde.clone()],
+        );
+        let v_M = p_M.sum_over_hypercube();
+        matrix_polys.push(p_M);
+        v_comms.push(CommittedValue::new(v_M, &mut rng, &params.scalar_gens));
+    }
+
+    // Transition check between phase 1 and phase 2
+    let cv_A = v_comms[0].clone();
+    let cv_B = v_comms[1].clone();
+    let cv_C = v_comms[2].clone();
+    let cv_AB = CommittedValue::new(cv_A.val * cv_B.val, &mut rng, &params.scalar_gens);
+
+    let product_stmt = pedersen::product::Statement {
+        comm_x: cv_A.comm,
+        comm_y: cv_B.comm,
+        comm_z: cv_AB.comm,
+    };
+    let product_wit = pedersen::product::Witness {
+        x: cv_A.val,
+        y: cv_B.val,
+        z: cv_AB.val,
+        rx: cv_A.r,
+        ry: cv_B.r,
+        rz: cv_AB.r,
+    };
+    let product_proof = pedersen::product::prove(
+        &params.product_params(),
+        &product_stmt,
+        &product_wit,
+        trans,
+        &mut rng,
+    );
+
+    let open_stmt = pedersen::open::Statement {
+        commitment: cv_C.comm,
+    };
+    let open_wit = pedersen::open::Witness {
+        x: cv_C.val,
+        r: cv_C.r,
+    };
+    let open_proof =
+        pedersen::open::prove(&params.open_params(), &open_stmt, &open_wit, trans, &mut rng);
+
+    let e = Multilinear::eq_tilde(&tau).evaluate(&r_prime);
+    let expected_h = (cv_AB - cv_C) * e;
+    let final_eq_stmt = pedersen::equals::Statement {
+        comm1: sc_phase1_proof.comm_final,
+        comm2: expected_h.comm,
+    };
+    let final_eq_wit = pedersen::equals::Witness {
+        x: expected_h.val,
+        r1: r_h_final,
+        r2: expected_h.r,
+    };
+    let final_equals_proof = pedersen::equals::prove(
+        &params.sigma_params(),
+        &final_eq_stmt,
+        &final_eq_wit,
+        trans,
+        &mut rng,
+    );
+
+    // phase 2: mat/vec sumcheck per matrix
+    let mut matrix_proofs = Vec::with_capacity(3);
+    for ((M, p_M), cv_M) in [&statement.A, &statement.B, &statement.C]
+        .into_iter()
+        .zip(matrix_polys.into_iter())
+        .zip(v_comms.iter())
+    {
+        let sc_stmt = sumcheck::Statement {
+            comm_sum: cv_M.comm,
+            num_vars: log_cols,
+            max_degree: 2,
+        };
+        let sc_wit = sumcheck::Witness {
+            polynomial: p_M.clone(),
+            sum: cv_M.val,
+            r_sum: cv_M.r,
+        };
+        let (sc_proof, r_double, r_p_final) =
+            sumcheck::prove(&params.sc_phase2_params(), &sc_stmt, &sc_wit, trans, &mut rng);
+
+        let w_point = r_double[..(log_cols - 1)].to_vec();
+        let selector = r_double[log_cols - 1];
+        let one = E::Scalar::from(1u64);
+
+        let w_m = w_tilde.evaluate(&w_point);
+        let cv_w_m = CommittedValue::new(w_m, &mut rng, &params.scalar_gens);
+        let quokka_stmt = quokka::Statement {
+            comm_rows: comm_w.clone(),
+            point: w_point.clone(),
+            comm_eval: cv_w_m.comm,
+        };
+        let quokka_wit = quokka::Witness {
+            poly: w_tilde.clone(),
+            openings: w_openings.clone(),
+            eval: cv_w_m.val,
+            r_eval: cv_w_m.r,
+        };
+        let quokka_proof =
+            quokka::prove(&quokka_params, &quokka_stmt, &quokka_wit, trans, &mut rng);
+
+        let M_tilde = M.multilinear_extension();
+        let M_at_r_prime = M_tilde.partial_eval(&r_prime);
+        let x_eval = x_tilde.evaluate(&w_point);
+        let z_eval = (one - selector) * x_eval + selector * w_m;
+        let m_eval = M_at_r_prime.evaluate(&r_double);
+        let p_eval = m_eval * z_eval;
+
+        let comm_z = params.scalar_gens[0] * ((one - selector) * x_eval) + cv_w_m.comm * selector;
+        let comm_e = comm_z * m_eval;
+        let r_comm_e = m_eval * (selector * cv_w_m.r);
+
+        let eq_stmt = pedersen::equals::Statement {
+            comm1: sc_proof.comm_final,
+            comm2: comm_e,
+        };
+        let eq_wit = pedersen::equals::Witness {
+            x: p_eval,
+            r1: r_p_final,
+            r2: r_comm_e,
+        };
+        let equals_proof =
+            pedersen::equals::prove(&params.sigma_params(), &eq_stmt, &eq_wit, trans, &mut rng);
+
+        matrix_proofs.push(MatrixProof {
+            comm_v: cv_M.comm,
+            sc_proof,
+            comm_w_m: cv_w_m.comm,
+            quokka_proof,
+            equals_proof,
+        });
+    }
+
+    let matrix_proofs: [MatrixProof<E>; 3] = matrix_proofs
+        .try_into()
+        .expect("expected exactly three matrix proofs");
+
+    Proof {
+        comm_w,
+        sc_phase1_proof,
+        matrix_proofs,
+        comm_v_ab: cv_AB.comm,
+        product_proof,
+        open_proof,
+        final_equals_proof,
+    }
 }
 
 /// Verify a ZK Delphian proof.
@@ -296,5 +504,103 @@ pub fn verify<E: EllipticCurve>(
 
     let comm_w = proof.comm_w;
 
-    todo!()
+    anyhow::ensure!(statement.x.size.is_power_of_two(), "x.size must be power of two");
+    anyhow::ensure!(num_rows.is_power_of_two(), "rows must be power of two");
+    anyhow::ensure!(num_cols.is_power_of_two(), "cols must be power of two");
+
+    trans.append_message("zk_delphian_protocol", ());
+    trans.append_message("zk_delphian_params", params);
+    trans.append_message("zk_delphian_statement", statement);
+    trans.append_message("zk_delphian_witness_commitment", &comm_w);
+
+    let tau = (0..log_rows)
+        .map(|_| trans.get_challenge("zk_delphian_tau"))
+        .collect::<Vec<E::Scalar>>();
+
+    let zero = E::Scalar::zero();
+    let comm_zero = pedersen::commit(zero, zero, &params.scalar_gens);
+    let h_stmt = sumcheck::Statement {
+        comm_sum: comm_zero,
+        num_vars: log_rows,
+        max_degree: 3,
+    };
+    let (comm_h_rprime, r_prime) =
+        sumcheck::verify(&params.sc_phase1_params(), &h_stmt, &proof.sc_phase1_proof, trans)?;
+
+    // Transition check between phases 1 and 2
+    let product_stmt = pedersen::product::Statement {
+        comm_x: proof.matrix_proofs[0].comm_v,
+        comm_y: proof.matrix_proofs[1].comm_v,
+        comm_z: proof.comm_v_ab,
+    };
+    pedersen::product::verify(
+        &params.product_params(),
+        &product_stmt,
+        &proof.product_proof,
+        trans,
+    )?;
+
+    let open_stmt = pedersen::open::Statement {
+        commitment: proof.matrix_proofs[2].comm_v,
+    };
+    pedersen::open::verify(&params.open_params(), &open_stmt, &proof.open_proof, trans)?;
+
+    let e = Multilinear::eq_tilde(&tau).evaluate(&r_prime);
+    let final_eq_stmt = pedersen::equals::Statement {
+        comm1: comm_h_rprime,
+        comm2: (proof.comm_v_ab - proof.matrix_proofs[2].comm_v) * e,
+    };
+    pedersen::equals::verify(
+        &params.sigma_params(),
+        &final_eq_stmt,
+        &proof.final_equals_proof,
+        trans,
+    )?;
+
+    // Complete each phase 2 proof per matrix
+    let x_tilde = statement.x.multilinear_extension();
+    for (M, matrix_pf) in [&statement.A, &statement.B, &statement.C]
+        .into_iter()
+        .zip(&proof.matrix_proofs)
+    {
+        let sc_stmt = sumcheck::Statement {
+            comm_sum: matrix_pf.comm_v,
+            num_vars: log_cols,
+            max_degree: 2,
+        };
+        let (comm_p_eval, r_double) =
+            sumcheck::verify(&params.sc_phase2_params(), &sc_stmt, &matrix_pf.sc_proof, trans)?;
+
+        let w_point = r_double[..(log_cols - 1)].to_vec();
+        let selector = r_double[log_cols - 1];
+        let quokka_stmt = quokka::Statement {
+            comm_rows: comm_w.clone(),
+            point: w_point.clone(),
+            comm_eval: matrix_pf.comm_w_m,
+        };
+        quokka::verify(&params.quokka_params(), &quokka_stmt, &matrix_pf.quokka_proof, trans)?;
+
+        let M_tilde = M.multilinear_extension();
+        let M_at_r_prime = M_tilde.partial_eval(&r_prime);
+        let m_eval = M_at_r_prime.evaluate(&r_double);
+
+        let one = E::Scalar::from(1u64);
+        let x_eval = x_tilde.evaluate(&w_point);
+        let comm_z =
+            params.scalar_gens[0] * ((one - selector) * x_eval) + matrix_pf.comm_w_m * selector;
+        let comm_e = comm_z * m_eval;
+
+        let eq_stmt = pedersen::equals::Statement {
+            comm1: comm_p_eval,
+            comm2: comm_e,
+        };
+        pedersen::equals::verify(
+            &params.sigma_params(),
+            &eq_stmt,
+            &matrix_pf.equals_proof,
+            trans,
+        )?;
+    }
+
+    Ok(())
 }
