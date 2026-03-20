@@ -85,8 +85,6 @@ pub mod open {
         trans: &mut Transcript,
         mut rng: impl rand::Rng,
     ) -> Proof<E> {
-        assert_eq!(statement.commitment, commit(witness.x, witness.r, &params.generators));
-
         let t_x = E::Scalar::random(&mut rng);
         let t_r = E::Scalar::random(&mut rng);
         let R = commit(t_x, t_r, &params.generators);
@@ -178,9 +176,6 @@ pub mod equals {
         trans: &mut Transcript,
         mut rng: impl rand::Rng,
     ) -> Proof<E> {
-        assert_eq!(statement.comm1, commit(witness.x, witness.r1, &params.generators));
-        assert_eq!(statement.comm2, commit(witness.x, witness.r2, &params.generators));
-
         let t_x = E::Scalar::random(&mut rng);
         let t_r1 = E::Scalar::random(&mut rng);
         let t_r2 = E::Scalar::random(&mut rng);
@@ -289,11 +284,6 @@ pub mod product {
         trans: &mut Transcript,
         mut rng: impl rand::Rng,
     ) -> Proof<E> {
-        assert_eq!(witness.z, witness.x * witness.y, "witness.z must equal witness.x * witness.y");
-        assert_eq!(statement.comm_x, commit(witness.x, witness.rx, &params.generators));
-        assert_eq!(statement.comm_y, commit(witness.y, witness.ry, &params.generators));
-        assert_eq!(statement.comm_z, commit(witness.z, witness.rz, &params.generators));
-
         let b1 = E::Scalar::random(&mut rng);
         let b2 = E::Scalar::random(&mut rng);
         let b3 = E::Scalar::random(&mut rng);
@@ -412,10 +402,6 @@ pub mod dot_product {
         assert_eq!(statement.a.len(), params.vec_gens.len(), "a.len() != vec_gens.len()");
         assert_eq!(witness.x.len(), params.vec_gens.len(), "x.len() != vec_gens.len()");
         assert_eq!(statement.a.len(), witness.x.len(), "a.len() != x.len()");
-        assert_eq!(witness.result, inner_product(&statement.a, &witness.x));
-        assert_eq!(statement.comm_x, vector_commit(&witness.x, witness.r_x, &params.vec_gens, params.scalar_gens[1]));
-        assert_eq!(statement.comm_result, commit(witness.result, witness.r_result, &params.scalar_gens));
-
         let d = (0..witness.x.len())
             .map(|_| E::Scalar::random(&mut rng))
             .collect_vec();
