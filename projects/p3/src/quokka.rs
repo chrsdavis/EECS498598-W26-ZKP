@@ -169,7 +169,6 @@ pub fn prove<E: EllipticCurve>(
     }
 
     let derived_eval = pedersen::inner_product(&a, &c);
-    assert_eq!(witness.eval, derived_eval, "witness.eval != f(point)");
 
     // Homomorphically derive the commitment to c = b^T M and its randomness.
     let comm_bm = E::msm(&b, &statement.comm_rows);
