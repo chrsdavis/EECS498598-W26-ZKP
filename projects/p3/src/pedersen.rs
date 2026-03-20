@@ -1,3 +1,4 @@
+#![allow(non_snake_case)]
 use crate::transcript::Transcript;
 use anyhow::Result;
 use itertools::Itertools;
@@ -84,7 +85,23 @@ pub mod open {
         trans: &mut Transcript,
         mut rng: impl rand::Rng,
     ) -> Proof<E> {
-        todo!()
+        assert_eq!(statement.commitment, commit(witness.x, witness.r, &params.generators));
+
+        let t_x = E::Scalar::random(&mut rng);
+        let t_r = E::Scalar::random(&mut rng);
+        let R = commit(t_x, t_r, &params.generators);
+
+        trans.append_message("pedersen_open_protocol", ());
+        trans.append_message("pedersen_open_params", params);
+        trans.append_message("pedersen_open_statement", statement);
+        trans.append_message("pedersen_open_mask", &R);
+        let c: E::Scalar = trans.get_challenge("pedersen_open_challenge");
+
+        Proof {
+            c,
+            z_x: t_x + c * witness.x,
+            z_r: t_r + c * witness.r,
+        }
     }
 
     /// Verify a proof of knowledge of a Pedersen commitment opening.
@@ -94,7 +111,16 @@ pub mod open {
         pf: &Proof<E>,
         trans: &mut Transcript,
     ) -> Result<()> {
-        todo!()
+        let R = commit(pf.z_x, pf.z_r, &params.generators) - statement.commitment * pf.c;
+
+        trans.append_message("pedersen_open_protocol", ());
+        trans.append_message("pedersen_open_params", params);
+        trans.append_message("pedersen_open_statement", statement);
+        trans.append_message("pedersen_open_mask", &R);
+        let expected_c: E::Scalar = trans.get_challenge("pedersen_open_challenge");
+
+        anyhow::ensure!(pf.c == expected_c, "invalid Pedersen opening proof");
+        Ok(())
     }
 }
 
@@ -152,7 +178,28 @@ pub mod equals {
         trans: &mut Transcript,
         mut rng: impl rand::Rng,
     ) -> Proof<E> {
-        todo!()
+        assert_eq!(statement.comm1, commit(witness.x, witness.r1, &params.generators));
+        assert_eq!(statement.comm2, commit(witness.x, witness.r2, &params.generators));
+
+        let t_x = E::Scalar::random(&mut rng);
+        let t_r1 = E::Scalar::random(&mut rng);
+        let t_r2 = E::Scalar::random(&mut rng);
+        let R1 = commit(t_x, t_r1, &params.generators);
+        let R2 = commit(t_x, t_r2, &params.generators);
+
+        trans.append_message("pedersen_equals_protocol", ());
+        trans.append_message("pedersen_equals_params", params);
+        trans.append_message("pedersen_equals_statement", statement);
+        trans.append_message("pedersen_equals_mask_left", &R1);
+        trans.append_message("pedersen_equals_mask_right", &R2);
+        let c: E::Scalar = trans.get_challenge("pedersen_equals_challenge");
+
+        Proof {
+            c,
+            z_x: t_x + c * witness.x,
+            z_r1: t_r1 + c * witness.r1,
+            z_r2: t_r2 + c * witness.r2,
+        }
     }
 
     /// Verify a proof that two commitments hide the same value.
@@ -162,7 +209,18 @@ pub mod equals {
         pf: &Proof<E>,
         trans: &mut Transcript,
     ) -> Result<()> {
-        todo!()
+        let R1 = commit(pf.z_x, pf.z_r1, &params.generators) - statement.comm1 * pf.c;
+        let R2 = commit(pf.z_x, pf.z_r2, &params.generators) - statement.comm2 * pf.c;
+
+        trans.append_message("pedersen_equals_protocol", ());
+        trans.append_message("pedersen_equals_params", params);
+        trans.append_message("pedersen_equals_statement", statement);
+        trans.append_message("pedersen_equals_mask_left", &R1);
+        trans.append_message("pedersen_equals_mask_right", &R2);
+        let expected_c: E::Scalar = trans.get_challenge("pedersen_equals_challenge");
+
+        anyhow::ensure!(pf.c == expected_c, "invalid Pedersen equality proof");
+        Ok(())
     }
 }
 
@@ -231,7 +289,37 @@ pub mod product {
         trans: &mut Transcript,
         mut rng: impl rand::Rng,
     ) -> Proof<E> {
-        todo!()
+        assert_eq!(witness.z, witness.x * witness.y, "witness.z must equal witness.x * witness.y");
+        assert_eq!(statement.comm_x, commit(witness.x, witness.rx, &params.generators));
+        assert_eq!(statement.comm_y, commit(witness.y, witness.ry, &params.generators));
+        assert_eq!(statement.comm_z, commit(witness.z, witness.rz, &params.generators));
+
+        let b1 = E::Scalar::random(&mut rng);
+        let b2 = E::Scalar::random(&mut rng);
+        let b3 = E::Scalar::random(&mut rng);
+        let b4 = E::Scalar::random(&mut rng);
+        let b5 = E::Scalar::random(&mut rng);
+
+        let R = commit(b1, b2, &params.generators);
+        let beta = commit(b3, b4, &params.generators);
+        let gamma = statement.comm_x * b3 + params.generators[1] * b5;
+
+        trans.append_message("pedersen_product_protocol", ());
+        trans.append_message("pedersen_product_params", params);
+        trans.append_message("pedersen_product_statement", statement);
+        trans.append_message("pedersen_product_mask_r", &R);
+        trans.append_message("pedersen_product_mask_beta", &beta);
+        trans.append_message("pedersen_product_mask_gamma", &gamma);
+        let c: E::Scalar = trans.get_challenge("pedersen_product_challenge");
+
+        Proof {
+            c,
+            z_x: b1 + c * witness.x,
+            z_rx: b2 + c * witness.rx,
+            z_y: b3 + c * witness.y,
+            z_ry: b4 + c * witness.ry,
+            z_prod: b5 + c * (witness.rz - witness.rx * witness.y),
+        }
     }
 
     /// Verify a proof that `z = x * y` for three committed values.
@@ -241,7 +329,20 @@ pub mod product {
         pf: &Proof<E>,
         trans: &mut Transcript,
     ) -> Result<()> {
-        todo!()
+        let R = commit(pf.z_x, pf.z_rx, &params.generators) - statement.comm_x * pf.c;
+        let beta = commit(pf.z_y, pf.z_ry, &params.generators) - statement.comm_y * pf.c;
+        let gamma = statement.comm_x * pf.z_y + params.generators[1] * pf.z_prod - statement.comm_z * pf.c;
+
+        trans.append_message("pedersen_product_protocol", ());
+        trans.append_message("pedersen_product_params", params);
+        trans.append_message("pedersen_product_statement", statement);
+        trans.append_message("pedersen_product_mask_r", &R);
+        trans.append_message("pedersen_product_mask_beta", &beta);
+        trans.append_message("pedersen_product_mask_gamma", &gamma);
+        let expected_c: E::Scalar = trans.get_challenge("pedersen_product_challenge");
+
+        anyhow::ensure!(pf.c == expected_c, "invalid Pedersen product proof");
+        Ok(())
     }
 }
 
@@ -308,7 +409,39 @@ pub mod dot_product {
         trans: &mut Transcript,
         mut rng: impl rand::Rng,
     ) -> Proof<E> {
-        todo!()
+        assert_eq!(statement.a.len(), params.vec_gens.len(), "a.len() != vec_gens.len()");
+        assert_eq!(witness.x.len(), params.vec_gens.len(), "x.len() != vec_gens.len()");
+        assert_eq!(statement.a.len(), witness.x.len(), "a.len() != x.len()");
+        assert_eq!(witness.result, inner_product(&statement.a, &witness.x));
+        assert_eq!(statement.comm_x, vector_commit(&witness.x, witness.r_x, &params.vec_gens, params.scalar_gens[1]));
+        assert_eq!(statement.comm_result, commit(witness.result, witness.r_result, &params.scalar_gens));
+
+        let d = (0..witness.x.len())
+            .map(|_| E::Scalar::random(&mut rng))
+            .collect_vec();
+        let o1 = E::Scalar::random(&mut rng);
+        let o2 = E::Scalar::random(&mut rng);
+
+        let C1 = vector_commit(&d, o1, &params.vec_gens, params.scalar_gens[1]);
+        let C2 = commit(inner_product(&d, &statement.a), o2, &params.scalar_gens);
+
+        trans.append_message("pedersen_dot_product_protocol", ());
+        trans.append_message("pedersen_dot_product_params", params);
+        trans.append_message("pedersen_dot_product_statement", statement);
+        trans.append_message("pedersen_dot_product_mask_vec", &C1);
+        trans.append_message("pedersen_dot_product_mask_result", &C2);
+        let c: E::Scalar = trans.get_challenge("pedersen_dot_product_challenge");
+
+        Proof {
+            c,
+            z_vec: d
+                .into_iter()
+                .zip(&witness.x)
+                .map(|(d_i, &x_i)| d_i + c * x_i)
+                .collect(),
+            z_delta: o1 + c * witness.r_x,
+            z_beta: o2 + c * witness.r_result,
+        }
     }
 
     /// Verify a proof that `y = <a, x>` for a committed vector `x` and committed
@@ -319,7 +452,24 @@ pub mod dot_product {
         pf: &Proof<E>,
         trans: &mut Transcript,
     ) -> Result<()> {
-        todo!()
+        anyhow::ensure!(statement.a.len() == params.vec_gens.len(), "a.len() != vec_gens.len()");
+        anyhow::ensure!(pf.z_vec.len() == params.vec_gens.len(), "z_vec.len() != vec_gens.len()");
+        anyhow::ensure!(statement.a.len() == pf.z_vec.len(), "a.len() != z_vec.len()");
+
+        let C1 = vector_commit(&pf.z_vec, pf.z_delta, &params.vec_gens, params.scalar_gens[1])
+            - statement.comm_x * pf.c;
+        let z_result = inner_product(&pf.z_vec, &statement.a);
+        let C2 = commit(z_result, pf.z_beta, &params.scalar_gens) - statement.comm_result * pf.c;
+
+        trans.append_message("pedersen_dot_product_protocol", ());
+        trans.append_message("pedersen_dot_product_params", params);
+        trans.append_message("pedersen_dot_product_statement", statement);
+        trans.append_message("pedersen_dot_product_mask_vec", &C1);
+        trans.append_message("pedersen_dot_product_mask_result", &C2);
+        let expected_c: E::Scalar = trans.get_challenge("pedersen_dot_product_challenge");
+
+        anyhow::ensure!(pf.c == expected_c, "invalid Pedersen dot-product proof");
+        Ok(())
     }
 }
 
